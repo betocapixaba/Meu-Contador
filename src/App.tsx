@@ -11,7 +11,8 @@ import {
   Sparkles, 
   Camera, 
   RefreshCw,
-  X
+  X,
+  LogOut
 } from "lucide-react";
 import Auth from "./components/Auth";
 import Dashboard from "./components/Dashboard";
@@ -43,6 +44,7 @@ export default function App() {
   // Modals
   const [showVoiceModal, setShowVoiceModal] = useState(false);
   const [showScanModal, setShowScanModal] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   // Toggle theme
   const toggleDarkMode = () => {
@@ -368,14 +370,20 @@ export default function App() {
         <header className={`px-6 py-4 border-b flex justify-between items-center z-10 shrink-0 ${
           darkMode ? "bg-slate-950/20 border-slate-900" : "bg-white border-slate-100 shadow-xs"
         }`}>
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 bg-gradient-to-tr from-indigo-500 to-purple-500 rounded-full flex items-center justify-center text-white font-black shadow-md shadow-indigo-500/15 shrink-0 text-xs">
+          <div 
+            onClick={() => setActiveTab("Perfil")}
+            className="flex items-center gap-2.5 cursor-pointer hover:opacity-85 active:scale-98 transition-all"
+            title="Ver Perfil & Configurações"
+          >
+            <div className={`w-10 h-10 bg-gradient-to-tr from-indigo-500 to-purple-500 rounded-full flex items-center justify-center text-white font-black shadow-md shrink-0 text-xs transition-all ${
+              activeTab === "Perfil" ? "ring-2 ring-indigo-500 ring-offset-2 ring-offset-slate-900" : "shadow-indigo-500/15"
+            }`}>
               {user?.displayName?.substring(0, 2).toUpperCase() || "ED"}
             </div>
             <div>
               <p className={`text-[9px] uppercase tracking-wider font-extrabold leading-none ${
-                darkMode ? "text-slate-400" : "text-slate-500"
-              }`}>Bem-vindo</p>
+                darkMode ? "text-indigo-400" : "text-indigo-600"
+              }`}>Ver Perfil ⚙️</p>
               <h1 className="text-sm font-bold leading-tight mt-0.5 text-slate-900 dark:text-white">
                 {user?.displayName?.split(" ")[0] || "Visitante"}
               </h1>
@@ -406,6 +414,21 @@ export default function App() {
               }`}
             >
               <RefreshCw className={`w-4 h-4 ${dataLoading ? "animate-spin text-indigo-500" : ""}`} />
+            </button>
+
+            <button
+              id="header-logout-btn"
+              onClick={() => {
+                setShowLogoutConfirm(true);
+              }}
+              title="Sair / Fazer Log out"
+              className={`p-2 rounded-xl border transition-all duration-200 active:scale-90 ${
+                darkMode 
+                  ? "bg-slate-850 border-slate-800 text-red-400 hover:text-red-300 hover:bg-red-950/20 hover:border-red-900/30" 
+                  : "bg-slate-50 border-slate-200 text-red-500 hover:bg-red-50 hover:border-red-200 shadow-xs"
+              }`}
+            >
+              <LogOut className="w-4 h-4" />
             </button>
           </div>
         </header>
@@ -552,6 +575,49 @@ export default function App() {
                 onTransactionAdded={fetchData}
                 onClose={() => setShowScanModal(false)}
               />
+            </div>
+          </div>
+        )}
+
+        {/* CUSTOM LOGOUT CONFIRMATION MODAL */}
+        {showLogoutConfirm && (
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-6">
+            <div className={`w-full max-w-xs p-5 rounded-3xl border shadow-2xl animate-slideUp ${
+              darkMode ? "bg-slate-900 border-slate-800 text-white" : "bg-white border-slate-100 text-slate-900"
+            }`}>
+              <h3 className="font-extrabold text-sm mb-2 text-rose-500">Sair do Aplicativo?</h3>
+              <p className={`text-xs mb-5 leading-relaxed ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
+                Deseja mesmo sair do aplicativo? Sua sessão será finalizada.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  id="cancel-logout-modal-btn"
+                  onClick={() => setShowLogoutConfirm(false)}
+                  className={`flex-1 py-2.5 text-[11px] font-bold rounded-xl border transition ${
+                    darkMode 
+                      ? "bg-slate-800 border-slate-700 hover:bg-slate-750 text-slate-300" 
+                      : "bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700"
+                  }`}
+                >
+                  Cancelar
+                </button>
+                <button
+                  id="confirm-logout-modal-btn"
+                  onClick={() => {
+                    setShowLogoutConfirm(false);
+                    const isDemo = localStorage.getItem("contador_ia_demo_mode") === "true";
+                    if (isDemo) {
+                      localStorage.removeItem("contador_ia_demo_mode");
+                      window.location.reload();
+                    } else {
+                      auth.signOut();
+                    }
+                  }}
+                  className="flex-1 py-2.5 text-[11px] font-bold rounded-xl bg-rose-600 hover:bg-rose-700 text-white transition active:scale-95 animate-pulse"
+                >
+                  Sair
+                </button>
+              </div>
             </div>
           </div>
         )}

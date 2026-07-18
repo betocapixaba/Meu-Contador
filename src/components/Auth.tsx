@@ -42,13 +42,15 @@ export default function Auth({ darkMode, onDemoLogin }: AuthProps) {
       console.error(err);
       let errorMsg = "Ocorreu um erro ao autenticar.";
       if (err.code === "auth/invalid-credential") {
-        errorMsg = "E-mail ou senha incorretos.";
+        errorMsg = "E-mail ou senha incorretos. Por favor, verifique seus dados ou cadastre-se.";
       } else if (err.code === "auth/email-already-in-use") {
-        errorMsg = "Este e-mail já está cadastrado.";
+        errorMsg = "Este e-mail já está cadastrado. Tente fazer login ou use outro e-mail.";
       } else if (err.code === "auth/weak-password") {
         errorMsg = "A senha deve conter no mínimo 6 caracteres.";
       } else if (err.code === "auth/operation-not-allowed") {
-        errorMsg = "O cadastro/login por E-mail e Senha não está ativado no Console do Firebase. Ative-o em 'Authentication > Sign-in method' ou use o botão 'Entrar com o Google' (recomendado e pronto para uso).";
+        errorMsg = "O método de login por E-mail e Senha não está ativado no Console do Firebase. Ative-o em 'Authentication > Sign-in method' ou use o botão verde 'Acessar sem Login (Demonstração Local)' abaixo.";
+      } else if (err.code === "auth/unauthorized-domain") {
+        errorMsg = `Este domínio (${window.location.hostname}) não está autorizado no Console do Firebase.\n\nPara resolver:\n1. Acesse o Console do Firebase\n2. Vá em Authentication > Configurações > Domínios Autorizados\n3. Adicione o domínio "${window.location.hostname}"`;
       } else if (err.message) {
         errorMsg = err.message;
       }
@@ -67,7 +69,15 @@ export default function Auth({ darkMode, onDemoLogin }: AuthProps) {
     } catch (err: any) {
       console.error(err);
       let errorMsg = "Falha ao entrar com o Google.";
-      if (err.message) {
+      if (err.code === "auth/unauthorized-domain") {
+        errorMsg = `Este domínio (${window.location.hostname}) não está autorizado no seu Console do Firebase.\n\nPara corrigir:\n1. Acesse o Console do seu Firebase\n2. Vá em 'Authentication' > 'Settings' (ou Configurações) > 'Authorized domains' (Domínios autorizados)\n3. Adicione o domínio "${window.location.hostname}" à lista\n4. Salve e recarregue esta página para tentar novamente.`;
+      } else if (err.code === "auth/popup-blocked") {
+        errorMsg = "O bloqueador de pop-ups do seu navegador impediu a abertura da janela do Google. Por favor, permita pop-ups para este site e tente novamente.";
+      } else if (err.code === "auth/popup-closed-by-user") {
+        errorMsg = "A janela de login do Google foi fechada antes de concluir o processo.";
+      } else if (err.code === "auth/operation-not-allowed") {
+        errorMsg = "O login do Google não está ativado no Console do Firebase. Ative o provedor Google em 'Authentication' > 'Sign-in method'.";
+      } else if (err.message) {
         errorMsg += " " + err.message;
       }
       setError(errorMsg);
@@ -86,7 +96,9 @@ export default function Auth({ darkMode, onDemoLogin }: AuthProps) {
       console.error(err);
       let errorMsg = "Falha ao entrar como convidado.";
       if (err.code === "auth/operation-not-allowed") {
-        errorMsg = "O Login de Convidado (Anônimo) não está ativado no Console do Firebase. Ative-o em 'Authentication > Sign-in method' ou use o botão 'Entrar com o Google'.";
+        errorMsg = "O Login de Convidado (Anônimo) não está ativado no Console do Firebase. Ative-o em 'Authentication > Sign-in method' > 'Anônimo' ou use o botão verde 'Acessar sem Login (Demonstração Local)'.";
+      } else if (err.code === "auth/unauthorized-domain") {
+        errorMsg = `Este domínio (${window.location.hostname}) não está autorizado no Console do Firebase. Adicione o domínio "${window.location.hostname}" em Authentication > Configurações > Domínios Autorizados.`;
       } else if (err.message) {
         errorMsg += ": " + err.message;
       }
@@ -97,7 +109,7 @@ export default function Auth({ darkMode, onDemoLogin }: AuthProps) {
   };
 
   return (
-    <div className={`min-h-screen flex flex-col justify-between p-6 ${
+    <div className={`min-h-full flex flex-col justify-between p-6 gap-6 ${
       darkMode ? "bg-[#0F172A] text-slate-100" : "bg-[#F8FAFC] text-slate-900"
     }`}>
       {/* Header */}

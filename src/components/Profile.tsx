@@ -51,6 +51,11 @@ export default function Profile({
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // States for custom modals replacing native popups
+  const [profileDeleteConfirm, setProfileDeleteConfirm] = useState<{ id: string; type: 'goals' | 'recurrentExpenses' | 'services' | 'clients'; title: string } | null>(null);
+  const [goalProgressToUpdate, setGoalProgressToUpdate] = useState<{ id: string; title: string; current: number; target: number } | null>(null);
+  const [newGoalProgressValue, setNewGoalProgressValue] = useState("");
+
   // Form states
   const [showAddGoalModal, setShowAddGoalModal] = useState(false);
   const [goalTitle, setGoalTitle] = useState("");
@@ -195,40 +200,35 @@ export default function Profile({
     }
   };
 
-  // Update Goal progress
-  const handleGoalProgressUpdate = async (id: string, current: number, target: number) => {
-    const newVal = prompt(`Atualizar valor poupado para esta meta (Atualmente: $${current}):`);
-    if (newVal === null) return;
-    
-    const num = Number(newVal);
+  // Update Goal progress triggers modal
+  const handleGoalProgressUpdate = (id: string, title: string, current: number, target: number) => {
+    setGoalProgressToUpdate({ id, title, current, target });
+    setNewGoalProgressValue(String(current));
+  };
+
+  const submitGoalProgressUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!goalProgressToUpdate) return;
+    const num = Number(newGoalProgressValue);
     if (isNaN(num)) return;
 
     try {
       if (isDemo) {
-        await localUpdateDoc("goals", id, { currentAmount: num });
+        await localUpdateDoc("goals", goalProgressToUpdate.id, { currentAmount: num });
       } else {
-        await updateDoc(doc(db, "goals", id), { currentAmount: num });
+        await updateDoc(doc(db, "goals", goalProgressToUpdate.id), { currentAmount: num });
       }
       onRefreshGoals();
     } catch (err) {
       console.error(err);
+    } finally {
+      setGoalProgressToUpdate(null);
     }
   };
 
-  // Delete Goal
-  const handleDeleteGoal = async (id: string) => {
-    if (confirm("Deseja remover esta meta?")) {
-      try {
-        if (isDemo) {
-          await localDeleteDoc("goals", id);
-        } else {
-          await deleteDoc(doc(db, "goals", id));
-        }
-        onRefreshGoals();
-      } catch (err) {
-        console.error(err);
-      }
-    }
+  // Delete Goal triggers modal
+  const handleDeleteGoal = (id: string, title: string) => {
+    setProfileDeleteConfirm({ id, type: "goals", title });
   };
 
   // Add Recurrent Expense
@@ -261,21 +261,9 @@ export default function Profile({
     }
   };
 
-  // Delete Recurrent
-  const handleDeleteRecurrent = async (id: string) => {
-    if (confirm("Remover esta conta recorrente?")) {
-      try {
-        if (isDemo) {
-          await localDeleteDoc("recurrentExpenses", id);
-        } else {
-          await deleteDoc(doc(db, "recurrentExpenses", id));
-        }
-        loadSubCollections();
-        onRefreshGoals(); // Trigger refresh in App state too
-      } catch (err) {
-        console.error(err);
-      }
-    }
+  // Delete Recurrent triggers modal
+  const handleDeleteRecurrent = (id: string, title: string) => {
+    setProfileDeleteConfirm({ id, type: "recurrentExpenses", title });
   };
 
   // Add Service
@@ -324,20 +312,9 @@ export default function Profile({
     }
   };
 
-  // Delete Service
-  const handleDeleteService = async (id: string) => {
-    if (confirm("Remover este serviço?")) {
-      try {
-        if (isDemo) {
-          await localDeleteDoc("services", id);
-        } else {
-          await deleteDoc(doc(db, "services", id));
-        }
-        loadSubCollections();
-      } catch (err) {
-        console.error(err);
-      }
-    }
+  // Delete Service triggers modal
+  const handleDeleteService = (id: string, title: string) => {
+    setProfileDeleteConfirm({ id, type: "services", title });
   };
 
   // Add Client
@@ -368,19 +345,32 @@ export default function Profile({
     }
   };
 
-  // Delete Client
-  const handleDeleteClient = async (id: string) => {
-    if (confirm("Remover este cliente?")) {
-      try {
-        if (isDemo) {
-          await localDeleteDoc("clients", id);
-        } else {
-          await deleteDoc(doc(db, "clients", id));
-        }
-        loadSubCollections();
-      } catch (err) {
-        console.error(err);
+  // Delete Client triggers modal
+  const handleDeleteClient = (id: string, name: string) => {
+    setProfileDeleteConfirm({ id, type: "clients", title: name });
+  };
+
+  // Unified submit handler for custom generic deletion confirm modal
+  const submitProfileDelete = async () => {
+    if (!profileDeleteConfirm) return;
+    const { id, type } = profileDeleteConfirm;
+
+    try {
+      if (isDemo) {
+        await localDeleteDoc(type, id);
+      } else {
+        await deleteDoc(doc(db, type, id));
       }
+      if (type === "goals") {
+        onRefreshGoals();
+      } else {
+        loadSubCollections();
+        onRefreshGoals(); // Refresh App state
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setProfileDeleteConfirm(null);
     }
   };
 
@@ -554,6 +544,22 @@ export default function Profile({
               </span>
             </button>
           </div>
+
+          {/* Prominent logout action button at the bottom of profile view */}
+          <div className="pt-4 mt-2">
+            <button
+              id="profile-large-logout-btn"
+              onClick={handleLogout}
+              className={`w-full flex items-center justify-center gap-2.5 py-3.5 px-4 rounded-2xl font-bold text-xs transition duration-150 border text-rose-500 hover:bg-rose-500/5 active:scale-95 ${
+                darkMode 
+                  ? "border-rose-500/25 bg-rose-500/5 hover:border-rose-500/40" 
+                  : "border-rose-200 bg-rose-50 hover:bg-rose-100/50 hover:border-rose-300"
+              }`}
+            >
+              <LogOut className="w-4.5 h-4.5" />
+              Sair da Conta (Fazer Logout)
+            </button>
+          </div>
         </div>
       )}
 
@@ -586,8 +592,8 @@ export default function Profile({
                       </div>
 
                       <div className="flex gap-2">
-                        <button id={`update-goal-btn-${g.id}`} onClick={() => handleGoalProgressUpdate(g.id, g.currentAmount, g.targetAmount)} className="text-[10px] text-purple-600 hover:underline">Poupar</button>
-                        <button id={`delete-goal-btn-${g.id}`} onClick={() => handleDeleteGoal(g.id)} className="text-zinc-500 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                        <button id={`update-goal-btn-${g.id}`} onClick={() => handleGoalProgressUpdate(g.id, g.title, g.currentAmount, g.targetAmount)} className="text-[10px] text-purple-600 hover:underline">Poupar</button>
+                        <button id={`delete-goal-btn-${g.id}`} onClick={() => handleDeleteGoal(g.id, g.title)} className="text-zinc-500 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div>
                     </div>
 
@@ -636,7 +642,7 @@ export default function Profile({
 
                   <div className="flex items-center gap-3">
                     <span className="text-xs font-extrabold font-mono text-red-500">-${r.amount}</span>
-                    <button id={`delete-recurrent-btn-${r.id}`} onClick={() => handleDeleteRecurrent(r.id)} className="text-zinc-500 hover:text-red-500">
+                    <button id={`delete-recurrent-btn-${r.id}`} onClick={() => handleDeleteRecurrent(r.id, r.title)} className="text-zinc-500 hover:text-red-500">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -686,7 +692,7 @@ export default function Profile({
 
                   <div className="flex items-center gap-3">
                     <span className="text-xs font-extrabold font-mono text-emerald-500">+${s.amount}</span>
-                    <button id={`delete-service-btn-${s.id}`} onClick={() => handleDeleteService(s.id)} className="text-zinc-500 hover:text-red-500">
+                    <button id={`delete-service-btn-${s.id}`} onClick={() => handleDeleteService(s.id, s.title)} className="text-zinc-500 hover:text-red-500">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -723,7 +729,7 @@ export default function Profile({
                     {c.phone && <p className={`text-[9px] ${darkMode ? "text-zinc-500" : "text-gray-400"}`}>Fone: {c.phone}</p>}
                   </div>
 
-                  <button id={`delete-client-btn-${c.id}`} onClick={() => handleDeleteClient(c.id)} className="text-zinc-500 hover:text-red-500">
+                  <button id={`delete-client-btn-${c.id}`} onClick={() => handleDeleteClient(c.id, c.name)} className="text-zinc-500 hover:text-red-500">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -867,6 +873,93 @@ export default function Profile({
               </div>
               <button id="submit-client-form-btn" type="submit" className="w-full bg-purple-600 text-white py-3.5 text-xs font-bold rounded-xl">Cadastrar Cliente</button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* CUSTOM GOAL PROGRESS UPDATER MODAL */}
+      {goalProgressToUpdate && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-6">
+          <div className={`w-full max-w-xs p-5 rounded-3xl border shadow-2xl animate-slideUp ${
+            darkMode ? "bg-slate-900 border-slate-800 text-white" : "bg-white border-slate-100 text-slate-900"
+          }`}>
+            <h3 className="font-extrabold text-sm mb-2 text-purple-500">Poupar para Meta</h3>
+            <p className={`text-xs mb-4 leading-relaxed ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
+              Defina o novo valor acumulado para a meta <strong>{goalProgressToUpdate.title}</strong> (Alvo: ${goalProgressToUpdate.target.toLocaleString()}):
+            </p>
+            <form onSubmit={submitGoalProgressUpdate} className="space-y-4">
+              <div className="relative">
+                <span className={`absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold ${darkMode ? "text-slate-500" : "text-slate-400"}`}>$</span>
+                <input
+                  id="goal-progress-update-input"
+                  type="number"
+                  required
+                  placeholder="Novo valor poupado"
+                  value={newGoalProgressValue}
+                  onChange={(e) => setNewGoalProgressValue(e.target.value)}
+                  className={`w-full pl-8 pr-4 py-2.5 text-xs rounded-xl border focus:outline-none focus:ring-2 focus:ring-purple-500 transition ${
+                    darkMode 
+                      ? "bg-slate-850 border-slate-700 text-white placeholder-slate-500 focus:border-purple-500" 
+                      : "bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-purple-500"
+                  }`}
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  id="cancel-progress-update-btn"
+                  onClick={() => setGoalProgressToUpdate(null)}
+                  className={`flex-1 py-2 text-[10px] font-bold rounded-xl border transition ${
+                    darkMode 
+                      ? "bg-slate-800 border-slate-700 hover:bg-slate-750 text-slate-300" 
+                      : "bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700"
+                  }`}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  id="confirm-progress-update-btn"
+                  className="flex-1 py-2 text-[10px] font-bold rounded-xl bg-purple-600 hover:bg-purple-700 text-white transition active:scale-95"
+                >
+                  Atualizar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* CUSTOM PROFILE DELETE CONFIRMATION MODAL */}
+      {profileDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-6">
+          <div className={`w-full max-w-xs p-5 rounded-3xl border shadow-2xl animate-slideUp ${
+            darkMode ? "bg-slate-900 border-slate-800 text-white" : "bg-white border-slate-100 text-slate-900"
+          }`}>
+            <h3 className="font-extrabold text-sm mb-2 text-rose-500">Excluir Item?</h3>
+            <p className={`text-xs mb-5 leading-relaxed ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
+              Deseja mesmo remover "<strong>{profileDeleteConfirm.title}</strong>"? Esta ação não pode ser desfeita.
+            </p>
+            <div className="flex gap-2">
+              <button
+                id="cancel-profile-delete-btn"
+                onClick={() => setProfileDeleteConfirm(null)}
+                className={`flex-1 py-2.5 text-[10px] font-bold rounded-xl border transition ${
+                  darkMode 
+                    ? "bg-slate-800 border-slate-700 hover:bg-slate-750 text-slate-300" 
+                    : "bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700"
+                }`}
+              >
+                Cancelar
+              </button>
+              <button
+                id="confirm-profile-delete-btn"
+                onClick={submitProfileDelete}
+                className="flex-1 py-2.5 text-[10px] font-bold rounded-xl bg-rose-600 hover:bg-rose-700 text-white transition active:scale-95"
+              >
+                Excluir
+              </button>
+            </div>
           </div>
         </div>
       )}

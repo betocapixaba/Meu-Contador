@@ -35,6 +35,7 @@ export default function TransactionsLists({
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [showAddModal, setShowAddModal] = useState(false);
   const [receiptModalUrl, setReceiptModalUrl] = useState<string | null>(null);
+  const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
 
   // Form states
   const [description, setDescription] = useState("");
@@ -99,21 +100,7 @@ export default function TransactionsLists({
     }
   };
 
-  // Handles deletion
-  const handleDelete = async (id: string) => {
-    if (confirm("Tem certeza que deseja remover este lançamento?")) {
-      try {
-        if (isDemoActive()) {
-          await localDeleteDoc("transactions", id);
-        } else {
-          await deleteDoc(doc(db, "transactions", id));
-        }
-        onRefresh();
-      } catch (err) {
-        console.error("Failed to delete:", err);
-      }
-    }
-  };
+
 
   // Filter list
   const filtered = transactions
@@ -312,7 +299,10 @@ export default function TransactionsLists({
 
                 <button
                   id={`delete-btn-${t.id}`}
-                  onClick={() => handleDelete(t.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setTransactionToDelete(t.id);
+                  }}
                   className={`p-1.5 rounded-xl transition-all duration-150 text-rose-500 hover:text-rose-600 active:scale-90 ${
                     darkMode ? "bg-rose-500/5 hover:bg-rose-500/15" : "bg-rose-50 hover:bg-rose-100"
                   }`}
@@ -493,6 +483,53 @@ export default function TransactionsLists({
               <X className="w-5 h-5" />
             </button>
             <img src={receiptModalUrl} alt="Anexo do Recibo" className="w-full h-auto rounded-2xl max-h-[80vh] object-contain" />
+          </div>
+        </div>
+      )}
+
+      {/* CUSTOM CONFIRMATION DIALOG FOR TRANSACTION DELETION */}
+      {transactionToDelete && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-6">
+          <div className={`w-full max-w-xs p-5 rounded-3xl border shadow-2xl animate-slideUp ${
+            darkMode ? "bg-slate-900 border-slate-800 text-white" : "bg-white border-slate-100 text-slate-900"
+          }`}>
+            <h3 className="font-extrabold text-sm mb-2 text-rose-500">Excluir Lançamento?</h3>
+            <p className={`text-xs mb-5 leading-relaxed ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
+              Tem certeza que deseja remover este lançamento? Esta ação não pode ser desfeita.
+            </p>
+            <div className="flex gap-2">
+              <button
+                id="cancel-delete-list-modal-btn"
+                onClick={() => setTransactionToDelete(null)}
+                className={`flex-1 py-2.5 text-[11px] font-bold rounded-xl border transition ${
+                  darkMode 
+                    ? "bg-slate-800 border-slate-700 hover:bg-slate-750 text-slate-300" 
+                    : "bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700"
+                }`}
+              >
+                Cancelar
+              </button>
+              <button
+                id="confirm-delete-list-modal-btn"
+                onClick={async () => {
+                  try {
+                    if (isDemoActive()) {
+                      await localDeleteDoc("transactions", transactionToDelete);
+                    } else {
+                      await deleteDoc(doc(db, "transactions", transactionToDelete));
+                    }
+                    onRefresh();
+                  } catch (err) {
+                    console.error("Failed to delete transaction:", err);
+                  } finally {
+                    setTransactionToDelete(null);
+                  }
+                }}
+                className="flex-1 py-2.5 text-[11px] font-bold rounded-xl bg-rose-600 hover:bg-rose-700 text-white transition active:scale-95"
+              >
+                Excluir
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -43,22 +43,7 @@ export default function Dashboard({
   const [selectedMonth, setSelectedMonth] = useState<string>(
     new Date().toISOString().substring(0, 7) // e.g. "2026-07"
   );
-
-  // Handles deletion directly from dashboard
-  const handleDeleteTransaction = async (id: string) => {
-    if (confirm("Tem certeza que deseja remover este lançamento?")) {
-      try {
-        if (isDemoActive()) {
-          await localDeleteDoc("transactions", id);
-        } else {
-          await deleteDoc(doc(db, "transactions", id));
-        }
-        if (onRefresh) onRefresh();
-      } catch (err) {
-        console.error("Failed to delete transaction from dashboard:", err);
-      }
-    }
-  };
+  const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
 
   // Month options for filter (last 6 months)
   const getMonthOptions = () => {
@@ -360,11 +345,14 @@ export default function Dashboard({
                     </p>
                   </div>
 
-                  <button
+                   <button
                     id={`dashboard-delete-btn-${t.id}`}
-                    onClick={() => handleDeleteTransaction(t.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setTransactionToDelete(t.id);
+                    }}
                     className={`p-1.5 rounded-xl transition-all duration-150 text-rose-500 hover:text-rose-600 active:scale-90 ${
-                      darkMode ? "bg-rose-500/5 hover:bg-rose-500/15" : "bg-rose-50 hover:bg-rose-100"
+                      darkMode ? "bg-rose-500/5 hover:bg-rose-500/15 hover:bg-rose-500/10" : "bg-rose-50 hover:bg-rose-100"
                     }`}
                     title="Remover lançamento"
                   >
@@ -376,6 +364,53 @@ export default function Dashboard({
           </div>
         )}
       </div>
+
+      {/* CUSTOM CONFIRMATION DIALOG FOR TRANSACTION DELETION */}
+      {transactionToDelete && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-6">
+          <div className={`w-full max-w-xs p-5 rounded-3xl border shadow-2xl animate-slideUp ${
+            darkMode ? "bg-slate-900 border-slate-800 text-white" : "bg-white border-slate-100 text-slate-900"
+          }`}>
+            <h3 className="font-extrabold text-sm mb-2 text-rose-500">Excluir Lançamento?</h3>
+            <p className={`text-xs mb-5 leading-relaxed ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
+              Tem certeza que deseja remover este lançamento? Esta ação não pode ser desfeita.
+            </p>
+            <div className="flex gap-2">
+              <button
+                id="cancel-delete-modal-btn"
+                onClick={() => setTransactionToDelete(null)}
+                className={`flex-1 py-2.5 text-[11px] font-bold rounded-xl border transition ${
+                  darkMode 
+                    ? "bg-slate-800 border-slate-700 hover:bg-slate-750 text-slate-300" 
+                    : "bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700"
+                }`}
+              >
+                Cancelar
+              </button>
+              <button
+                id="confirm-delete-modal-btn"
+                onClick={async () => {
+                  try {
+                    if (isDemoActive()) {
+                      await localDeleteDoc("transactions", transactionToDelete);
+                    } else {
+                      await deleteDoc(doc(db, "transactions", transactionToDelete));
+                    }
+                    if (onRefresh) onRefresh();
+                  } catch (err) {
+                    console.error("Failed to delete transaction:", err);
+                  } finally {
+                    setTransactionToDelete(null);
+                  }
+                }}
+                className="flex-1 py-2.5 text-[11px] font-bold rounded-xl bg-rose-600 hover:bg-rose-700 text-white transition active:scale-95"
+              >
+                Excluir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
