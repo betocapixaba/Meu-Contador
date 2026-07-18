@@ -1,0 +1,22 @@
+{
+  "short_name": "Contador IA",
+  "name": "Meu Contador IA",
+  "description": "Seu assistente financeiro inteligente controlado por voz e PWA completo.",
+  "icons": [
+    {
+      "src": "https://img.icons8.com/fluency/192/000000/accounting.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://img.icons8.com/fluency/512/000000/accounting.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#121214",
+  "theme_color": "#820ad5",
+  "display": "standalone",
+  "orientation": "portrait"
+}

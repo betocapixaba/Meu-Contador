@@ -1,0 +1,6 @@
+{
+  "name": "Meu Contador IA",
+  "description": "Seu assistente financeiro inteligente controlado por voz e PWA completo.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
