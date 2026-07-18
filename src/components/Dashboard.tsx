@@ -18,6 +18,7 @@ import { deleteDoc, doc } from "firebase/firestore";
 import { db } from "../firebase";
 import { Transaction } from "../types";
 import Insights from "./Insights";
+import { isDemoActive, localDeleteDoc } from "../utils/demoDb";
 
 interface DashboardProps {
   darkMode: boolean;
@@ -26,6 +27,7 @@ interface DashboardProps {
   onOpenScan: () => void;
   onSelectTab: (tab: string) => void;
   goals: any[];
+  onRefresh?: () => void;
 }
 
 export default function Dashboard({ 
@@ -34,7 +36,8 @@ export default function Dashboard({
   onOpenVoice, 
   onOpenScan, 
   onSelectTab,
-  goals
+  goals,
+  onRefresh
 }: DashboardProps) {
   const [hideBalance, setHideBalance] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState<string>(
@@ -45,7 +48,12 @@ export default function Dashboard({
   const handleDeleteTransaction = async (id: string) => {
     if (confirm("Tem certeza que deseja remover este lançamento?")) {
       try {
-        await deleteDoc(doc(db, "transactions", id));
+        if (isDemoActive()) {
+          await localDeleteDoc("transactions", id);
+        } else {
+          await deleteDoc(doc(db, "transactions", id));
+        }
+        if (onRefresh) onRefresh();
       } catch (err) {
         console.error("Failed to delete transaction from dashboard:", err);
       }

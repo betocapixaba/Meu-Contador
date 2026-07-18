@@ -28,6 +28,7 @@ import {
 } from "firebase/firestore";
 import { db, auth } from "../firebase";
 import { Goal, RecurrentExpense, Service, Client } from "../types";
+import { isDemoActive, localAddDoc, localUpdateDoc, localDeleteDoc } from "../utils/demoDb";
 
 interface ProfileProps {
   darkMode: boolean;
@@ -107,30 +108,43 @@ export default function Profile({
     });
   };
 
-  const user = auth.currentUser;
+  const isDemo = isDemoActive();
+  const user = isDemo 
+    ? { uid: "local-demo-user", displayName: "Cliente Demonstração", email: "demo@contador.ia" } 
+    : auth.currentUser;
 
   // Load collections
   const loadSubCollections = async () => {
     if (!user) return;
     setLoading(true);
     try {
-      // Load Recurrent Expenses
-      const rq = query(collection(db, "recurrentExpenses"), where("userId", "==", user.uid));
-      const rSnap = await getDocs(rq);
-      const rList = rSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as RecurrentExpense));
-      setRecurrents(rList);
+      if (isDemo) {
+        const localRecurrent = localStorage.getItem("demo_recurrentExpenses");
+        const localServices = localStorage.getItem("demo_services");
+        const localClients = localStorage.getItem("demo_clients");
 
-      // Load Services
-      const sq = query(collection(db, "services"), where("userId", "==", user.uid));
-      const sSnap = await getDocs(sq);
-      const sList = sSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Service));
-      setServices(sList);
+        setRecurrents(localRecurrent ? JSON.parse(localRecurrent) : []);
+        setServices(localServices ? JSON.parse(localServices) : []);
+        setClients(localClients ? JSON.parse(localClients) : []);
+      } else {
+        // Load Recurrent Expenses
+        const rq = query(collection(db, "recurrentExpenses"), where("userId", "==", user.uid));
+        const rSnap = await getDocs(rq);
+        const rList = rSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as RecurrentExpense));
+        setRecurrents(rList);
 
-      // Load Clients
-      const cq = query(collection(db, "clients"), where("userId", "==", user.uid));
-      const cSnap = await getDocs(cq);
-      const cList = cSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Client));
-      setClients(cList);
+        // Load Services
+        const sq = query(collection(db, "services"), where("userId", "==", user.uid));
+        const sSnap = await getDocs(sq);
+        const sList = sSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Service));
+        setServices(sList);
+
+        // Load Clients
+        const cq = query(collection(db, "clients"), where("userId", "==", user.uid));
+        const cSnap = await getDocs(cq);
+        const cList = cSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Client));
+        setClients(cList);
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -144,7 +158,12 @@ export default function Profile({
 
   // Handles Logout
   const handleLogout = () => {
-    auth.signOut();
+    if (isDemo) {
+      localStorage.removeItem("contador_ia_demo_mode");
+      window.location.reload();
+    } else {
+      auth.signOut();
+    }
   };
 
   // Add Goal
@@ -153,13 +172,19 @@ export default function Profile({
     if (!goalTitle.trim() || !goalTarget || !user) return;
 
     try {
-      await addDoc(collection(db, "goals"), {
+      const data = {
         userId: user.uid,
         title: goalTitle.trim(),
         targetAmount: Number(goalTarget),
         currentAmount: 0,
         deadline: goalDeadline || new Date().toISOString().split("T")[0]
-      });
+      };
+
+      if (isDemo) {
+        await localAddDoc("goals", data);
+      } else {
+        await addDoc(collection(db, "goals"), data);
+      }
       setGoalTitle("");
       setGoalTarget("");
       setGoalDeadline("");
@@ -179,7 +204,11 @@ export default function Profile({
     if (isNaN(num)) return;
 
     try {
-      await updateDoc(doc(db, "goals", id), { currentAmount: num });
+      if (isDemo) {
+        await localUpdateDoc("goals", id, { currentAmount: num });
+      } else {
+        await updateDoc(doc(db, "goals", id), { currentAmount: num });
+      }
       onRefreshGoals();
     } catch (err) {
       console.error(err);
@@ -190,7 +219,11 @@ export default function Profile({
   const handleDeleteGoal = async (id: string) => {
     if (confirm("Deseja remover esta meta?")) {
       try {
-        await deleteDoc(doc(db, "goals", id));
+        if (isDemo) {
+          await localDeleteDoc("goals", id);
+        } else {
+          await deleteDoc(doc(db, "goals", id));
+        }
         onRefreshGoals();
       } catch (err) {
         console.error(err);
@@ -204,18 +237,25 @@ export default function Profile({
     if (!recurrentTitle.trim() || !recurrentAmount || !user) return;
 
     try {
-      await addDoc(collection(db, "recurrentExpenses"), {
+      const data = {
         userId: user.uid,
         title: recurrentTitle.trim(),
         amount: Number(recurrentAmount),
         category: recurrentCategory || "Outros",
         dueDate: Number(recurrentDueDate) || 5
-      });
+      };
+
+      if (isDemo) {
+        await localAddDoc("recurrentExpenses", data);
+      } else {
+        await addDoc(collection(db, "recurrentExpenses"), data);
+      }
       setRecurrentTitle("");
       setRecurrentAmount("");
       setRecurrentCategory("");
       setShowAddRecurrentModal(false);
       loadSubCollections();
+      onRefreshGoals(); // Trigger refresh in App state too
     } catch (err) {
       console.error(err);
     }
@@ -225,8 +265,13 @@ export default function Profile({
   const handleDeleteRecurrent = async (id: string) => {
     if (confirm("Remover esta conta recorrente?")) {
       try {
-        await deleteDoc(doc(db, "recurrentExpenses", id));
+        if (isDemo) {
+          await localDeleteDoc("recurrentExpenses", id);
+        } else {
+          await deleteDoc(doc(db, "recurrentExpenses", id));
+        }
         loadSubCollections();
+        onRefreshGoals(); // Trigger refresh in App state too
       } catch (err) {
         console.error(err);
       }
@@ -239,14 +284,20 @@ export default function Profile({
     if (!serviceTitle.trim() || !serviceAmount || !serviceClient || !user) return;
 
     try {
-      await addDoc(collection(db, "services"), {
+      const data = {
         userId: user.uid,
         title: serviceTitle.trim(),
         amount: Number(serviceAmount),
         clientName: serviceClient.trim(),
         status: serviceStatus,
         date: serviceDate || new Date().toISOString().split("T")[0]
-      });
+      };
+
+      if (isDemo) {
+        await localAddDoc("services", data);
+      } else {
+        await addDoc(collection(db, "services"), data);
+      }
       setServiceTitle("");
       setServiceAmount("");
       setServiceClient("");
@@ -262,7 +313,11 @@ export default function Profile({
   const handleToggleServiceStatus = async (id: string, current: string) => {
     const nextStatus = current === "pendente" ? "realizado" : current === "realizado" ? "pago" : "pendente";
     try {
-      await updateDoc(doc(db, "services", id), { status: nextStatus });
+      if (isDemo) {
+        await localUpdateDoc("services", id, { status: nextStatus });
+      } else {
+        await updateDoc(doc(db, "services", id), { status: nextStatus });
+      }
       loadSubCollections();
     } catch (err) {
       console.error(err);
@@ -273,7 +328,11 @@ export default function Profile({
   const handleDeleteService = async (id: string) => {
     if (confirm("Remover este serviço?")) {
       try {
-        await deleteDoc(doc(db, "services", id));
+        if (isDemo) {
+          await localDeleteDoc("services", id);
+        } else {
+          await deleteDoc(doc(db, "services", id));
+        }
         loadSubCollections();
       } catch (err) {
         console.error(err);
@@ -287,12 +346,18 @@ export default function Profile({
     if (!clientName.trim() || !user) return;
 
     try {
-      await addDoc(collection(db, "clients"), {
+      const data = {
         userId: user.uid,
         name: clientName.trim(),
         email: clientEmail.trim() || null,
         phone: clientPhone.trim() || null
-      });
+      };
+
+      if (isDemo) {
+        await localAddDoc("clients", data);
+      } else {
+        await addDoc(collection(db, "clients"), data);
+      }
       setClientName("");
       setClientEmail("");
       setClientPhone("");
@@ -307,7 +372,11 @@ export default function Profile({
   const handleDeleteClient = async (id: string) => {
     if (confirm("Remover este cliente?")) {
       try {
-        await deleteDoc(doc(db, "clients", id));
+        if (isDemo) {
+          await localDeleteDoc("clients", id);
+        } else {
+          await deleteDoc(doc(db, "clients", id));
+        }
         loadSubCollections();
       } catch (err) {
         console.error(err);

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { collection, addDoc } from "firebase/firestore";
 import { db, auth } from "../firebase";
 import { Mic, MicOff, Send, Sparkles, Check, AlertCircle, X, Volume2, ExternalLink } from "lucide-react";
+import { isDemoActive, localAddDoc } from "../utils/demoDb";
 
 interface VoiceAssistantProps {
   darkMode: boolean;
@@ -114,10 +115,12 @@ export default function VoiceAssistant({ darkMode, onTransactionAdded, onClose }
 
       const parsedData = await response.json();
       
-      // Save directly to Firestore if user is logged in
-      const currentUser = auth.currentUser;
+      // Save directly to Firestore if user is logged in or Local Demo
+      const isDemo = isDemoActive();
+      const currentUser = isDemo ? { uid: "local-demo-user" } : auth.currentUser;
+      
       if (currentUser) {
-        await addDoc(collection(db, "transactions"), {
+        const transactionData = {
           userId: currentUser.uid,
           type: parsedData.type,
           amount: Number(parsedData.amount) || 0,
@@ -129,7 +132,13 @@ export default function VoiceAssistant({ darkMode, onTransactionAdded, onClose }
           isRecurrent: !!parsedData.isRecurrent,
           receiptImage: null,
           createdAt: new Date().toISOString()
-        });
+        };
+
+        if (isDemo) {
+          await localAddDoc("transactions", transactionData);
+        } else {
+          await addDoc(collection(db, "transactions"), transactionData);
+        }
 
         setSuccessData(parsedData);
         setManualInput("");

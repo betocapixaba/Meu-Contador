@@ -22,6 +22,7 @@ import VoiceAssistant from "./components/VoiceAssistant";
 import ReceiptScanner from "./components/ReceiptScanner";
 import { Transaction, Goal, RecurrentExpense } from "./types";
 import { checkSmartAlerts } from "./notifications";
+import { seedInitialDemoData } from "./utils/demoDb";
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -66,6 +67,19 @@ export default function App() {
 
   // Auth observer
   useEffect(() => {
+    const isDemo = localStorage.getItem("contador_ia_demo_mode") === "true";
+    if (isDemo) {
+      seedInitialDemoData();
+      setUser({
+        uid: "local-demo-user",
+        displayName: "Cliente Demonstração",
+        email: "demo@contador.ia",
+        emailVerified: true
+      } as any);
+      setAuthLoading(false);
+      return;
+    }
+
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setAuthLoading(false);
@@ -78,6 +92,29 @@ export default function App() {
     if (!user) return;
     setDataLoading(true);
     try {
+      if (user.uid === "local-demo-user") {
+        seedInitialDemoData();
+        const localTransactions = localStorage.getItem("demo_transactions");
+        const localGoals = localStorage.getItem("demo_goals");
+        const localRecurrent = localStorage.getItem("demo_recurrentExpenses");
+        
+        const tList = localTransactions ? JSON.parse(localTransactions) : [];
+        const gList = localGoals ? JSON.parse(localGoals) : [];
+        const rList = localRecurrent ? JSON.parse(localRecurrent) : [];
+        
+        tList.sort((a: any, b: any) => {
+          const timeA = a.createdAt ? new Date(a.createdAt).getTime() : (a.date ? new Date(a.date).getTime() : 0);
+          const timeB = b.createdAt ? new Date(b.createdAt).getTime() : (b.date ? new Date(b.date).getTime() : 0);
+          return timeB - timeA;
+        });
+
+        setTransactions(tList);
+        setGoals(gList);
+        setRecurrentExpenses(rList);
+        setDataLoading(false);
+        return;
+      }
+
       // 1. Transactions realtime / initial fetch
       const tQuery = query(
         collection(db, "transactions"), 
@@ -131,6 +168,7 @@ export default function App() {
   // Realtime updates subscription for transactions
   useEffect(() => {
     if (!user) return;
+    if (user.uid === "local-demo-user") return;
 
     const tQuery = query(
       collection(db, "transactions"), 
@@ -160,6 +198,7 @@ export default function App() {
   // Realtime goals subscription
   useEffect(() => {
     if (!user) return;
+    if (user.uid === "local-demo-user") return;
 
     const gQuery = query(
       collection(db, "goals"),
@@ -180,6 +219,7 @@ export default function App() {
   // Realtime recurrentExpenses subscription
   useEffect(() => {
     if (!user) return;
+    if (user.uid === "local-demo-user") return;
 
     const rQuery = query(
       collection(db, "recurrentExpenses"),
@@ -254,7 +294,16 @@ export default function App() {
           </div>
           
           <div className="flex-1 overflow-y-auto no-scrollbar">
-            <Auth darkMode={darkMode} />
+            <Auth darkMode={darkMode} onDemoLogin={() => {
+              localStorage.setItem("contador_ia_demo_mode", "true");
+              seedInitialDemoData();
+              setUser({
+                uid: "local-demo-user",
+                displayName: "Cliente Demonstração",
+                email: "demo@contador.ia",
+                emailVerified: true
+              } as any);
+            }} />
           </div>
         </div>
 
@@ -371,6 +420,7 @@ export default function App() {
               onOpenScan={() => setShowScanModal(true)}
               onSelectTab={setActiveTab}
               goals={goals}
+              onRefresh={fetchData}
             />
           )}
 

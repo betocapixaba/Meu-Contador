@@ -12,9 +12,10 @@ import { Wallet, ShieldAlert, Sparkles, User, Lock, Mail, ChevronRight } from "l
 
 interface AuthProps {
   darkMode: boolean;
+  onDemoLogin?: () => void;
 }
 
-export default function Auth({ darkMode }: AuthProps) {
+export default function Auth({ darkMode, onDemoLogin }: AuthProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -232,6 +233,21 @@ export default function Auth({ darkMode }: AuthProps) {
           Entrar com o Google (Instantâneo)
         </button>
 
+        {/* Local Demo Entry (Saves to LocalStorage - perfect for quick access without Firebase issues) */}
+        <button
+          id="auth-local-demo-btn"
+          type="button"
+          onClick={() => {
+            if (onDemoLogin) {
+              onDemoLogin();
+            }
+          }}
+          className="w-full py-3 px-4 text-sm font-semibold rounded-xl flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 active:scale-95 text-white shadow-md shadow-emerald-500/15 transition duration-150 mb-3"
+        >
+          <Sparkles className="w-4 h-4 text-white animate-bounce" />
+          Acessar sem Login (Demonstração Local)
+        </button>
+
         {/* Demo Fast Entry */}
         <button
           id="auth-guest-btn"
@@ -244,8 +260,7 @@ export default function Auth({ darkMode }: AuthProps) {
               : "border-slate-200 text-slate-600 hover:bg-slate-50"
           }`}
         >
-          <Sparkles className="w-4 h-4 text-indigo-500 animate-pulse" />
-          Entrar como Convidado (Demo Rápida)
+          Entrar como Convidado (Firebase)
         </button>
 
         <p className="text-center text-xs mt-6">

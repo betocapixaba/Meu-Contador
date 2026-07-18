@@ -15,6 +15,7 @@ import {
 import { collection, addDoc, deleteDoc, doc } from "firebase/firestore";
 import { db, auth } from "../firebase";
 import { Transaction } from "../types";
+import { isDemoActive, localAddDoc, localDeleteDoc } from "../utils/demoDb";
 
 interface TransactionsListsProps {
   darkMode: boolean;
@@ -56,9 +57,11 @@ export default function TransactionsLists({
 
     setLoading(true);
     try {
-      const currentUser = auth.currentUser;
+      const isDemo = isDemoActive();
+      const currentUser = isDemo ? { uid: "local-demo-user" } : auth.currentUser;
+      
       if (currentUser) {
-        await addDoc(collection(db, "transactions"), {
+        const transactionData = {
           userId: currentUser.uid,
           type: currentTab,
           amount: Number(amount),
@@ -70,7 +73,13 @@ export default function TransactionsLists({
           isRecurrent,
           receiptImage: null,
           createdAt: new Date().toISOString()
-        });
+        };
+
+        if (isDemo) {
+          await localAddDoc("transactions", transactionData);
+        } else {
+          await addDoc(collection(db, "transactions"), transactionData);
+        }
 
         // Reset
         setDescription("");
@@ -94,7 +103,11 @@ export default function TransactionsLists({
   const handleDelete = async (id: string) => {
     if (confirm("Tem certeza que deseja remover este lançamento?")) {
       try {
-        await deleteDoc(doc(db, "transactions", id));
+        if (isDemoActive()) {
+          await localDeleteDoc("transactions", id);
+        } else {
+          await deleteDoc(doc(db, "transactions", id));
+        }
         onRefresh();
       } catch (err) {
         console.error("Failed to delete:", err);

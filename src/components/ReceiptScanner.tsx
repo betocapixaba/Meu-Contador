@@ -2,6 +2,7 @@ import React, { useState, useRef } from "react";
 import { collection, addDoc } from "firebase/firestore";
 import { db, auth } from "../firebase";
 import { Camera, Upload, Check, AlertCircle, RefreshCw, X, FileText } from "lucide-react";
+import { isDemoActive, localAddDoc } from "../utils/demoDb";
 
 interface ReceiptScannerProps {
   darkMode: boolean;
@@ -56,10 +57,12 @@ export default function ReceiptScanner({ darkMode, onTransactionAdded, onClose }
 
       const parsedData = await response.json();
 
-      // Save directly to Firestore as a 'despesa'
-      const currentUser = auth.currentUser;
+      // Save directly to Firestore or Local storage as a 'despesa'
+      const isDemo = isDemoActive();
+      const currentUser = isDemo ? { uid: "local-demo-user" } : auth.currentUser;
+      
       if (currentUser) {
-        await addDoc(collection(db, "transactions"), {
+        const transactionData = {
           userId: currentUser.uid,
           type: "despesa",
           amount: Number(parsedData.amount) || 0,
@@ -71,7 +74,13 @@ export default function ReceiptScanner({ darkMode, onTransactionAdded, onClose }
           isRecurrent: false,
           receiptImage: imagePreview, // Save base64 for offline image display!
           createdAt: new Date().toISOString()
-        });
+        };
+
+        if (isDemo) {
+          await localAddDoc("transactions", transactionData);
+        } else {
+          await addDoc(collection(db, "transactions"), transactionData);
+        }
 
         setSuccessData(parsedData);
         setImagePreview(null);
