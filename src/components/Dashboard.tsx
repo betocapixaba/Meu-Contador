@@ -19,6 +19,7 @@ import { db } from "../firebase";
 import { Transaction } from "../types";
 import Insights from "./Insights";
 import { isDemoActive, localDeleteDoc } from "../utils/demoDb";
+import { Currency, formatCurrency } from "../utils/currency";
 
 interface DashboardProps {
   darkMode: boolean;
@@ -28,6 +29,7 @@ interface DashboardProps {
   onSelectTab: (tab: string) => void;
   goals: any[];
   onRefresh?: () => void;
+  currency?: Currency;
 }
 
 export default function Dashboard({ 
@@ -37,7 +39,8 @@ export default function Dashboard({
   onOpenScan, 
   onSelectTab,
   goals,
-  onRefresh
+  onRefresh,
+  currency
 }: DashboardProps) {
   const [hideBalance, setHideBalance] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState<string>(
@@ -130,8 +133,8 @@ export default function Dashboard({
       {/* Vibrant Palette Balance Card */}
       <div className={`p-6 rounded-[2rem] relative overflow-hidden transition-all duration-200 shadow-xl ${
         darkMode 
-          ? "bg-gradient-to-br from-indigo-600 via-indigo-750 to-purple-700 text-white shadow-indigo-950/40 border border-indigo-500/20" 
-          : "bg-indigo-600 text-white shadow-lg shadow-indigo-200"
+          ? "bg-gradient-to-br from-purple-600 via-purple-700 to-purple-800 text-white shadow-purple-950/40 border border-purple-500/20" 
+          : "bg-purple-600 text-white shadow-lg shadow-purple-200"
       }`}>
         {/* Geometric circle overlay from mockup */}
         <div className="absolute -right-4 -top-4 w-24 h-24 bg-white opacity-10 rounded-full"></div>
@@ -142,7 +145,7 @@ export default function Dashboard({
             <span className="text-xs opacity-80 mb-1 font-bold uppercase tracking-wider">Saldo Líquido Disponível</span>
             <div className="flex items-center gap-2 mt-1">
               <span className="text-3xl font-extrabold tracking-tight font-sans">
-                {hideBalance ? "••••••" : `$ ${currentBalance.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`}
+                {hideBalance ? "••••••" : formatCurrency(currentBalance, currency?.symbol)}
               </span>
               <button
                 id="toggle-balance-visibility-btn"
@@ -166,7 +169,7 @@ export default function Dashboard({
               Receitas
             </div>
             <p className="text-sm font-extrabold tracking-tight mt-0.5 font-sans">
-              {hideBalance ? "••••••" : `$ ${totalIncome.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`}
+              {hideBalance ? "••••••" : formatCurrency(totalIncome, currency?.symbol)}
             </p>
           </div>
           <div>
@@ -175,7 +178,7 @@ export default function Dashboard({
               Despesas
             </div>
             <p className="text-sm font-extrabold tracking-tight mt-0.5 font-sans">
-              {hideBalance ? "••••••" : `$ ${totalExpense.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`}
+              {hideBalance ? "••••••" : formatCurrency(totalExpense, currency?.symbol)}
             </p>
           </div>
         </div>
@@ -192,10 +195,10 @@ export default function Dashboard({
               : "bg-white border-slate-100 hover:bg-slate-50 shadow-sm"
           }`}
         >
-          <div className="w-10 h-10 bg-indigo-500/10 text-indigo-500 rounded-xl flex items-center justify-center mb-3">
+          <div className="w-10 h-10 bg-purple-500/10 text-purple-500 rounded-xl flex items-center justify-center mb-3">
             <Sparkles className="w-5 h-5" />
           </div>
-          <span className="text-xs font-extrabold block">Falar com Contador</span>
+          <span className="text-xs font-extrabold block">Falar com Kathleen</span>
           <span className={`text-[10px] mt-0.5 block ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
             Comando de voz inteligente
           </span>
@@ -264,11 +267,11 @@ export default function Dashboard({
                     <div key={category} className="space-y-1">
                       <div className="flex justify-between text-xs">
                         <span className="font-semibold text-slate-700 dark:text-slate-300">{category}</span>
-                        <span className="font-mono font-bold text-slate-900 dark:text-white">${amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                        <span className="font-mono font-bold text-slate-900 dark:text-white">{formatCurrency(amount, currency?.symbol)}</span>
                       </div>
                       <div className={`w-full h-2 rounded-full overflow-hidden ${darkMode ? "bg-slate-800" : "bg-slate-100"}`}>
                         <div 
-                          className="h-full bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full" 
+                          className="h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full" 
                           style={{ width: `${percentage}%` }}
                         ></div>
                       </div>
@@ -287,7 +290,7 @@ export default function Dashboard({
           <button
             id="view-all-receitas-tab-btn"
             onClick={() => onSelectTab("Receitas")}
-            className="text-xs text-indigo-600 dark:text-indigo-400 font-bold hover:underline"
+            className="text-xs text-purple-600 dark:text-purple-400 font-bold hover:underline"
           >
             Ver Tudo
           </button>
@@ -338,7 +341,7 @@ export default function Dashboard({
                     <p className={`text-xs font-extrabold font-mono ${
                       t.type === "receita" ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
                     }`}>
-                      {t.type === "receita" ? "+" : "-"}${t.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                      {t.type === "receita" ? "+" : "-"}{formatCurrency(t.amount, currency?.symbol)}
                     </p>
                     <p className={`text-[8px] font-mono mt-0.5 ${darkMode ? "text-slate-500" : "text-slate-400"}`}>
                       {t.date}

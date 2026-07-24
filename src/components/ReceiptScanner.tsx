@@ -121,7 +121,7 @@ export default function ReceiptScanner({ darkMode, onTransactionAdded, onClose }
       </div>
 
       <p className={`text-xs mb-4 ${darkMode ? "text-zinc-400" : "text-gray-500"}`}>
-        Tire uma foto ou suba a imagem de uma nota fiscal ou recibo. A IA do Contador vai ler o valor, data e local e cadastrar automaticamente!
+        Tire uma foto ou suba a imagem de uma nota fiscal ou recibo. A IA da Kathleen Contadora vai ler o valor, data e local e cadastrar automaticamente!
       </p>
 
       {/* Upload area */}

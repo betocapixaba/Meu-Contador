@@ -16,19 +16,22 @@ import { collection, addDoc, deleteDoc, doc } from "firebase/firestore";
 import { db, auth } from "../firebase";
 import { Transaction } from "../types";
 import { isDemoActive, localAddDoc, localDeleteDoc } from "../utils/demoDb";
+import { Currency, formatCurrency } from "../utils/currency";
 
 interface TransactionsListsProps {
   darkMode: boolean;
   transactions: Transaction[];
   initialType: "receita" | "despesa";
   onRefresh: () => void;
+  currency?: Currency;
 }
 
 export default function TransactionsLists({ 
   darkMode, 
   transactions, 
   initialType, 
-  onRefresh 
+  onRefresh,
+  currency
 }: TransactionsListsProps) {
   const [currentTab, setCurrentTab] = useState<"receita" | "despesa">(initialType);
   const [searchTerm, setSearchTerm] = useState("");
@@ -179,7 +182,7 @@ export default function TransactionsLists({
           <p className={`text-xl font-extrabold font-mono mt-0.5 ${
             currentTab === "receita" ? "text-emerald-500" : darkMode ? "text-white" : "text-gray-900"
           }`}>
-            ${totalSum.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+            {formatCurrency(totalSum, currency?.symbol)}
           </p>
         </div>
         <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold uppercase ${
@@ -290,7 +293,7 @@ export default function TransactionsLists({
                   <p className={`text-xs font-extrabold font-mono ${
                     t.type === "receita" ? "text-emerald-500" : darkMode ? "text-zinc-300" : "text-gray-900"
                   }`}>
-                    {t.type === "receita" ? "+" : "-"}${t.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                    {t.type === "receita" ? "+" : "-"}{formatCurrency(t.amount, currency?.symbol)}
                   </p>
                   <p className={`text-[8px] font-mono mt-0.5 ${darkMode ? "text-zinc-600" : "text-gray-400"}`}>
                     {t.date}
@@ -355,7 +358,7 @@ export default function TransactionsLists({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={`block text-xs font-semibold mb-1 ${darkMode ? "text-zinc-400" : "text-gray-500"}`}>Valor ($) *</label>
+                  <label className={`block text-xs font-semibold mb-1 ${darkMode ? "text-zinc-400" : "text-gray-500"}`}>Valor ({currency?.symbol || "$"}) *</label>
                   <input
                     id="form-amount"
                     type="number"

@@ -39,7 +39,7 @@ export default function Auth({ darkMode, onDemoLogin }: AuthProps) {
         await signInWithEmailAndPassword(auth, email, password);
       }
     } catch (err: any) {
-      console.error(err);
+      console.warn("Auth error:", err.message || err);
       let errorMsg = "Ocorreu um erro ao autenticar.";
       if (err.code === "auth/invalid-credential") {
         errorMsg = "E-mail ou senha incorretos. Por favor, verifique seus dados ou cadastre-se.";
@@ -67,7 +67,7 @@ export default function Auth({ darkMode, onDemoLogin }: AuthProps) {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
     } catch (err: any) {
-      console.error(err);
+      console.warn("Google Auth error:", err.message || err);
       let errorMsg = "Falha ao entrar com o Google.";
       if (err.code === "auth/unauthorized-domain") {
         errorMsg = `Este domínio (${window.location.hostname}) não está autorizado no seu Console do Firebase.\n\nPara corrigir:\n1. Acesse o Console do seu Firebase\n2. Vá em 'Authentication' > 'Settings' (ou Configurações) > 'Authorized domains' (Domínios autorizados)\n3. Adicione o domínio "${window.location.hostname}" à lista\n4. Salve e recarregue esta página para tentar novamente.`;
@@ -93,7 +93,7 @@ export default function Auth({ darkMode, onDemoLogin }: AuthProps) {
       const userCredential = await signInAnonymously(auth);
       await updateProfile(userCredential.user, { displayName: "Visitante" });
     } catch (err: any) {
-      console.error(err);
+      console.warn("Guest Auth error:", err.message || err);
       let errorMsg = "Falha ao entrar como convidado.";
       if (err.code === "auth/operation-not-allowed") {
         errorMsg = "O Login de Convidado (Anônimo) não está ativado no Console do Firebase. Ative-o em 'Authentication > Sign-in method' > 'Anônimo' ou use o botão verde 'Acessar sem Login (Demonstração Local)'.";
@@ -114,10 +114,10 @@ export default function Auth({ darkMode, onDemoLogin }: AuthProps) {
     }`}>
       {/* Header */}
       <div className="flex flex-col items-center justify-center pt-12 pb-6">
-        <div className="w-16 h-16 bg-gradient-to-tr from-indigo-500 to-purple-600 rounded-3xl flex items-center justify-center shadow-lg shadow-indigo-500/30 mb-4 animate-pulse">
+        <div className="w-16 h-16 bg-gradient-to-tr from-purple-500 to-purple-600 rounded-3xl flex items-center justify-center shadow-lg shadow-purple-500/30 mb-4 animate-pulse">
           <Wallet className="w-8 h-8 text-white" />
         </div>
-        <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-indigo-400 to-purple-500 bg-clip-text text-transparent">Contador IA</h1>
+        <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-purple-400 to-purple-500 bg-clip-text text-transparent">Kathleen Contadora</h1>
         <p className={`text-xs mt-1.5 text-center max-w-[280px] font-medium ${
           darkMode ? "text-slate-400" : "text-slate-500"
         }`}>
@@ -155,10 +155,10 @@ export default function Auth({ darkMode, onDemoLogin }: AuthProps) {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
-                className={`w-full pl-10 pr-4 py-3 text-sm rounded-xl border focus:outline-none focus:ring-2 focus:ring-indigo-500 transition ${
+                className={`w-full pl-10 pr-4 py-3 text-sm rounded-xl border focus:outline-none focus:ring-2 focus:ring-purple-500 transition ${
                   darkMode 
-                    ? "bg-slate-800 border-slate-700 text-white placeholder-slate-500 focus:border-indigo-500" 
-                    : "bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-indigo-500"
+                    ? "bg-slate-800 border-slate-700 text-white placeholder-slate-500 focus:border-purple-500" 
+                    : "bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-purple-500"
                 }`}
               />
             </div>
@@ -175,10 +175,10 @@ export default function Auth({ darkMode, onDemoLogin }: AuthProps) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className={`w-full pl-10 pr-4 py-3 text-sm rounded-xl border focus:outline-none focus:ring-2 focus:ring-indigo-500 transition ${
+              className={`w-full pl-10 pr-4 py-3 text-sm rounded-xl border focus:outline-none focus:ring-2 focus:ring-purple-500 transition ${
                 darkMode 
-                  ? "bg-slate-800 border-slate-700 text-white placeholder-slate-500 focus:border-indigo-500" 
-                  : "bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-indigo-500"
+                  ? "bg-slate-800 border-slate-700 text-white placeholder-slate-500 focus:border-purple-500" 
+                  : "bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-purple-500"
               }`}
             />
           </div>
@@ -194,10 +194,10 @@ export default function Auth({ darkMode, onDemoLogin }: AuthProps) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className={`w-full pl-10 pr-4 py-3 text-sm rounded-xl border focus:outline-none focus:ring-2 focus:ring-indigo-500 transition ${
+              className={`w-full pl-10 pr-4 py-3 text-sm rounded-xl border focus:outline-none focus:ring-2 focus:ring-purple-500 transition ${
                 darkMode 
-                  ? "bg-slate-800 border-slate-700 text-white placeholder-slate-500 focus:border-indigo-500" 
-                  : "bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-indigo-500"
+                  ? "bg-slate-800 border-slate-700 text-white placeholder-slate-500 focus:border-purple-500" 
+                  : "bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-purple-500"
               }`}
             />
           </div>
@@ -206,7 +206,7 @@ export default function Auth({ darkMode, onDemoLogin }: AuthProps) {
             id="auth-submit-btn"
             type="submit"
             disabled={loading}
-            className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 active:scale-95 text-white py-3 px-4 text-sm font-semibold rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/25 transition disabled:opacity-50"
+            className="w-full bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 active:scale-95 text-white py-3 px-4 text-sm font-semibold rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-purple-500/25 transition disabled:opacity-50"
           >
             {loading ? "Processando..." : isRegistering ? "Criar Conta" : "Entrar com E-mail"}
             <ChevronRight className="w-4 h-4" />
@@ -280,7 +280,7 @@ export default function Auth({ darkMode, onDemoLogin }: AuthProps) {
             id="auth-toggle-mode-btn"
             type="button"
             onClick={() => setIsRegistering(!isRegistering)}
-            className="text-indigo-600 font-semibold hover:underline"
+            className="text-purple-600 font-semibold hover:underline"
           >
             {isRegistering ? "Já tem conta? Faça Login" : "Não tem conta? Cadastre-se"}
           </button>

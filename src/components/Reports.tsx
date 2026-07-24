@@ -11,13 +11,15 @@ import {
   Layers 
 } from "lucide-react";
 import { Transaction } from "../types";
+import { Currency, formatCurrency } from "../utils/currency";
 
 interface ReportsProps {
   darkMode: boolean;
   transactions: Transaction[];
+  currency?: Currency;
 }
 
-export default function Reports({ darkMode, transactions }: ReportsProps) {
+export default function Reports({ darkMode, transactions, currency }: ReportsProps) {
   const [reportMonth, setReportMonth] = useState<string>(
     new Date().toISOString().substring(0, 7) // Current month "YYYY-MM"
   );
@@ -74,7 +76,7 @@ export default function Reports({ darkMode, transactions }: ReportsProps) {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Relatorio_Contador_IA_${reportMonth}.csv`);
+    link.setAttribute("download", `Relatorio_Kathleen_Contadora_${reportMonth}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -149,7 +151,7 @@ export default function Reports({ darkMode, transactions }: ReportsProps) {
           </div>
           <h3 className="font-extrabold text-base">Demonstrativo Financeiro Mensal</h3>
           <p className={`text-xs ${darkMode ? "text-zinc-500" : "text-gray-400"}`}>
-            Período: {reportMonth} (Meu Contador IA)
+            Período: {reportMonth} (Kathleen Contadora)
           </p>
         </div>
 
@@ -157,16 +159,16 @@ export default function Reports({ darkMode, transactions }: ReportsProps) {
         <div className="grid grid-cols-3 gap-3 text-center mb-6">
           <div className={`p-3 rounded-2xl ${darkMode ? "bg-zinc-950" : "bg-gray-50/80"}`}>
             <span className={`text-[9px] font-bold uppercase tracking-wider block ${darkMode ? "text-zinc-500" : "text-gray-400"}`}>Entradas</span>
-            <span className="text-xs font-bold font-mono text-emerald-500 mt-1 block">+${totalIncomes.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+            <span className="text-xs font-bold font-mono text-emerald-500 mt-1 block">+{formatCurrency(totalIncomes, currency?.symbol)}</span>
           </div>
           <div className={`p-3 rounded-2xl ${darkMode ? "bg-zinc-950" : "bg-gray-50/80"}`}>
             <span className={`text-[9px] font-bold uppercase tracking-wider block ${darkMode ? "text-zinc-500" : "text-gray-400"}`}>Saídas</span>
-            <span className="text-xs font-bold font-mono text-red-500 mt-1 block">-${totalExpenses.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+            <span className="text-xs font-bold font-mono text-red-500 mt-1 block">-{formatCurrency(totalExpenses, currency?.symbol)}</span>
           </div>
           <div className={`p-3 rounded-2xl ${darkMode ? "bg-zinc-950" : "bg-gray-50/80"}`}>
             <span className={`text-[9px] font-bold uppercase tracking-wider block ${darkMode ? "text-zinc-500" : "text-gray-400"}`}>Resultado</span>
             <span className={`text-xs font-bold font-mono mt-1 block ${netSavings >= 0 ? "text-emerald-500" : "text-red-500"}`}>
-              {netSavings >= 0 ? "+" : ""}${netSavings.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+              {netSavings >= 0 ? "+" : ""}{formatCurrency(netSavings, currency?.symbol)}
             </span>
           </div>
         </div>
@@ -203,7 +205,7 @@ export default function Reports({ darkMode, transactions }: ReportsProps) {
                       <td className={`py-3 text-right font-mono font-bold whitespace-nowrap ${
                         t.type === "receita" ? "text-emerald-500" : "text-gray-500"
                       }`}>
-                        {t.type === "receita" ? "+" : "-"}${t.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                        {t.type === "receita" ? "+" : "-"}{formatCurrency(t.amount, currency?.symbol)}
                       </td>
                     </tr>
                   ))}

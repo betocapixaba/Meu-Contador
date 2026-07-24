@@ -168,10 +168,10 @@ export default function VoiceAssistant({ darkMode, onTransactionAdded, onClose }
     }`}>
       <div className="flex justify-between items-center mb-5">
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 bg-gradient-to-tr from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-md">
+          <div className="w-9 h-9 bg-gradient-to-tr from-purple-500 to-purple-600 rounded-xl flex items-center justify-center shadow-md">
             <Sparkles className="w-4.5 h-4.5 text-white" />
           </div>
-          <h3 className="font-extrabold text-lg tracking-tight">Falar com o Contador</h3>
+          <h3 className="font-extrabold text-lg tracking-tight">Falar com Kathleen Contadora</h3>
         </div>
         {onClose && (
           <button id="close-voice-modal-btn" onClick={onClose} className={`p-2 rounded-full transition ${
@@ -184,7 +184,7 @@ export default function VoiceAssistant({ darkMode, onTransactionAdded, onClose }
 
       {/* Frame / Iframe Warning Card */}
       {isIframe && (
-        <div className="p-3.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs rounded-2xl mb-4 leading-relaxed font-medium">
+        <div className="p-3.5 bg-purple-500/10 border border-purple-500/20 text-purple-400 text-xs rounded-2xl mb-4 leading-relaxed font-medium">
           <div className="flex items-start gap-2">
             <ExternalLink className="w-4 h-4 shrink-0 mt-0.5" />
             <div>
@@ -200,8 +200,8 @@ export default function VoiceAssistant({ darkMode, onTransactionAdded, onClose }
         <div className="relative flex items-center justify-center mb-4">
           {isListening && (
             <>
-              <div className="absolute w-28 h-28 bg-indigo-500/20 rounded-full animate-ping"></div>
-              <div className="absolute w-24 h-24 bg-indigo-500/30 rounded-full animate-pulse"></div>
+              <div className="absolute w-28 h-28 bg-purple-500/20 rounded-full animate-ping"></div>
+              <div className="absolute w-24 h-24 bg-purple-500/30 rounded-full animate-pulse"></div>
             </>
           )}
           <button
@@ -210,7 +210,7 @@ export default function VoiceAssistant({ darkMode, onTransactionAdded, onClose }
             className={`w-20 h-20 rounded-full flex items-center justify-center shadow-xl transition-all duration-200 active:scale-90 z-10 ${
               isListening 
                 ? "bg-rose-500 hover:bg-rose-600 text-white shadow-rose-500/30" 
-                : "bg-gradient-to-b from-indigo-500 to-indigo-700 hover:from-indigo-600 hover:to-indigo-800 text-white shadow-indigo-600/30"
+                : "bg-gradient-to-b from-purple-500 to-purple-700 hover:from-purple-600 hover:to-purple-800 text-white shadow-purple-600/30"
             }`}
           >
             {isListening ? (
@@ -289,17 +289,17 @@ export default function VoiceAssistant({ darkMode, onTransactionAdded, onClose }
             value={manualInput}
             onChange={(e) => setManualInput(e.target.value)}
             disabled={loading || isListening}
-            className={`flex-1 px-4 py-3 text-xs rounded-xl border focus:outline-none focus:ring-2 focus:ring-indigo-500 transition ${
+            className={`flex-1 px-4 py-3 text-xs rounded-xl border focus:outline-none focus:ring-2 focus:ring-purple-500 transition ${
               darkMode 
-                ? "bg-slate-800 border-slate-700 text-white focus:border-indigo-500" 
-                : "bg-slate-50 border-slate-200 text-slate-900 focus:border-indigo-500"
+                ? "bg-slate-800 border-slate-700 text-white focus:border-purple-500" 
+                : "bg-slate-50 border-slate-200 text-slate-900 focus:border-purple-500"
             }`}
           />
           <button
             id="voice-manual-submit-btn"
             type="submit"
             disabled={loading || isListening || !manualInput.trim()}
-            className="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 active:scale-95 text-white p-3 rounded-xl transition disabled:opacity-50"
+            className="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 active:scale-95 text-white p-3 rounded-xl transition disabled:opacity-50"
           >
             <Send className="w-4 h-4" />
           </button>

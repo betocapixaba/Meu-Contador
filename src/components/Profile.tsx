@@ -14,7 +14,12 @@ import {
   AlertCircle,
   TrendingUp,
   X,
-  Bell
+  Bell,
+  Mail,
+  Lock,
+  Key,
+  Settings,
+  RefreshCw
 } from "lucide-react";
 import { 
   collection, 
@@ -26,24 +31,36 @@ import {
   query, 
   where 
 } from "firebase/firestore";
+import { 
+  updateProfile, 
+  updateEmail, 
+  updatePassword 
+} from "firebase/auth";
 import { db, auth } from "../firebase";
 import { Goal, RecurrentExpense, Service, Client } from "../types";
 import { isDemoActive, localAddDoc, localUpdateDoc, localDeleteDoc } from "../utils/demoDb";
+import { Currency, WORLD_CURRENCIES, formatCurrency } from "../utils/currency";
 
 interface ProfileProps {
   darkMode: boolean;
   onToggleDarkMode: () => void;
   goals: Goal[];
   onRefreshGoals: () => void;
+  currency?: Currency;
+  onChangeCurrency?: (curr: Currency) => void;
+  onLogoutClick?: () => void;
 }
 
 export default function Profile({ 
   darkMode, 
   onToggleDarkMode, 
   goals, 
-  onRefreshGoals 
+  onRefreshGoals,
+  currency,
+  onChangeCurrency,
+  onLogoutClick
 }: ProfileProps) {
-  const [activeSubSection, setActiveSubSection] = useState<"perfil" | "metas" | "recorrentes" | "servicos" | "clientes">("perfil");
+  const [activeSubSection, setActiveSubSection] = useState<"perfil" | "metas" | "recorrentes" | "servicos" | "clientes" | "conta">("perfil");
 
   // Collections state
   const [recurrents, setRecurrents] = useState<RecurrentExpense[]>([]);
@@ -55,6 +72,15 @@ export default function Profile({
   const [profileDeleteConfirm, setProfileDeleteConfirm] = useState<{ id: string; type: 'goals' | 'recurrentExpenses' | 'services' | 'clients'; title: string } | null>(null);
   const [goalProgressToUpdate, setGoalProgressToUpdate] = useState<{ id: string; title: string; current: number; target: number } | null>(null);
   const [newGoalProgressValue, setNewGoalProgressValue] = useState("");
+
+  const [showCurrencyModal, setShowCurrencyModal] = useState(false);
+  const [currencySearch, setCurrencySearch] = useState("");
+
+  const filteredCurrencies = WORLD_CURRENCIES.filter(
+    (c) =>
+      c.name.toLowerCase().includes(currencySearch.toLowerCase()) ||
+      c.code.toLowerCase().includes(currencySearch.toLowerCase())
+  );
 
   // Form states
   const [showAddGoalModal, setShowAddGoalModal] = useState(false);
@@ -98,7 +124,7 @@ export default function Profile({
     if (permission === "granted") {
       const { sendSmartNotification } = await import("../notifications");
       sendSmartNotification("Alertas Ativados! 🔔", {
-        body: "Seu Contador IA agora enviará alertas inteligentes sobre suas contas a pagar e metas de poupança atingidas.",
+        body: "Kathleen Contadora agora enviará alertas inteligentes sobre suas contas a pagar e metas de poupança atingidas.",
         tag: "notifications-welcome"
       });
     }
@@ -107,16 +133,146 @@ export default function Profile({
   const handleSendTestNotification = async () => {
     const { sendSmartNotification } = await import("../notifications");
     sendSmartNotification("Alerta de Teste Inteligente 💡", {
-      body: "Este é um exemplo de notificação que o Contador IA enviará quando uma conta estiver para vencer ou meta for atingida!",
+      body: "Este é um exemplo de notificação que a Kathleen Contadora enviará quando uma conta estiver para vencer ou meta for atingida!",
       tag: "test-alert",
       requireInteraction: true
     });
   };
 
   const isDemo = isDemoActive();
+
+  // Reactive display states for name and email
+  const [demoDisplayName, setDemoDisplayName] = useState(() => localStorage.getItem("contador_ia_demo_display_name") || "Cliente Demonstração");
+  const [demoEmail, setDemoEmail] = useState(() => localStorage.getItem("contador_ia_demo_email") || "demo@contador.ia");
+  const [fbUserUpdateTrigger, setFbUserUpdateTrigger] = useState(0);
+
   const user = isDemo 
-    ? { uid: "local-demo-user", displayName: "Cliente Demonstração", email: "demo@contador.ia" } 
-    : auth.currentUser;
+    ? { uid: "local-demo-user", displayName: demoDisplayName, email: demoEmail } 
+    : { 
+        uid: auth.currentUser?.uid || "", 
+        displayName: auth.currentUser?.displayName || "Usuário", 
+        email: auth.currentUser?.email || "" 
+      };
+
+  // Account modification states
+  const [accName, setAccName] = useState("");
+  const [accEmail, setAccEmail] = useState("");
+  const [accPassword, setAccPassword] = useState("");
+  const [accConfirmPassword, setAccConfirmPassword] = useState("");
+  const [accSuccessMsg, setAccSuccessMsg] = useState<string | null>(null);
+  const [accErrorMsg, setAccErrorMsg] = useState<string | null>(null);
+  const [accLoading, setAccLoading] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      setAccName(user.displayName || "");
+      setAccEmail(user.email || "");
+    }
+  }, [user.displayName, user.email]);
+
+  const handleUpdateAccountName = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAccSuccessMsg(null);
+    setAccErrorMsg(null);
+    if (!accName.trim()) {
+      setAccErrorMsg("O nome não pode estar vazio.");
+      return;
+    }
+    setAccLoading(true);
+    try {
+      if (isDemo) {
+        localStorage.setItem("contador_ia_demo_display_name", accName.trim());
+        setDemoDisplayName(accName.trim());
+        setAccSuccessMsg("Nome atualizado com sucesso (Demonstração Local)!");
+      } else if (auth.currentUser) {
+        await updateProfile(auth.currentUser, { displayName: accName.trim() });
+        setFbUserUpdateTrigger(prev => prev + 1);
+        setAccSuccessMsg("Nome atualizado com sucesso no Firebase!");
+      } else {
+        setAccErrorMsg("Usuário não autenticado.");
+      }
+    } catch (err: any) {
+      console.warn("Error updating display name:", err);
+      setAccErrorMsg(err.message || "Erro ao atualizar nome.");
+    } finally {
+      setAccLoading(false);
+    }
+  };
+
+  const handleUpdateAccountEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAccSuccessMsg(null);
+    setAccErrorMsg(null);
+    if (!accEmail.trim()) {
+      setAccErrorMsg("O e-mail não pode estar vazio.");
+      return;
+    }
+    setAccLoading(true);
+    try {
+      if (isDemo) {
+        localStorage.setItem("contador_ia_demo_email", accEmail.trim());
+        setDemoEmail(accEmail.trim());
+        setAccSuccessMsg("E-mail atualizado com sucesso (Demonstração Local)!");
+      } else if (auth.currentUser) {
+        await updateEmail(auth.currentUser, accEmail.trim());
+        setFbUserUpdateTrigger(prev => prev + 1);
+        setAccSuccessMsg("E-mail atualizado com sucesso!");
+      } else {
+        setAccErrorMsg("Usuário não autenticado.");
+      }
+    } catch (err: any) {
+      console.warn("Error updating email:", err);
+      if (err.code === "auth/requires-recent-login") {
+        setAccErrorMsg("Por segurança, esta operação requer login recente. Por favor, saia e faça login novamente para tentar de novo.");
+      } else {
+        setAccErrorMsg(err.message || "Erro ao atualizar e-mail.");
+      }
+    } finally {
+      setAccLoading(false);
+    }
+  };
+
+  const handleUpdateAccountPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAccSuccessMsg(null);
+    setAccErrorMsg(null);
+    if (!accPassword) {
+      setAccErrorMsg("A nova senha não pode estar vazia.");
+      return;
+    }
+    if (accPassword.length < 6) {
+      setAccErrorMsg("A senha deve conter no mínimo 6 caracteres.");
+      return;
+    }
+    if (accPassword !== accConfirmPassword) {
+      setAccErrorMsg("As senhas não coincidem.");
+      return;
+    }
+    setAccLoading(true);
+    try {
+      if (isDemo) {
+        setAccSuccessMsg("Senha de demonstração simulada com sucesso!");
+        setAccPassword("");
+        setAccConfirmPassword("");
+      } else if (auth.currentUser) {
+        await updatePassword(auth.currentUser, accPassword);
+        setAccSuccessMsg("Senha atualizada com sucesso!");
+        setAccPassword("");
+        setAccConfirmPassword("");
+      } else {
+        setAccErrorMsg("Usuário não autenticado.");
+      }
+    } catch (err: any) {
+      console.warn("Error updating password:", err);
+      if (err.code === "auth/requires-recent-login") {
+        setAccErrorMsg("Por segurança, esta operação requer login recente. Por favor, saia e faça login novamente para tentar de novo.");
+      } else {
+        setAccErrorMsg(err.message || "Erro ao atualizar senha.");
+      }
+    } finally {
+      setAccLoading(false);
+    }
+  };
 
   // Load collections
   const loadSubCollections = async () => {
@@ -402,12 +558,15 @@ export default function Profile({
 
             <button
               id="logout-action-btn"
-              onClick={handleLogout}
-              className={`p-2 rounded-xl transition ${
-                darkMode ? "hover:bg-zinc-800 text-red-400" : "hover:bg-gray-100 text-red-500"
+              onClick={onLogoutClick || handleLogout}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all duration-200 active:scale-90 text-[10px] font-extrabold shrink-0 ${
+                darkMode 
+                  ? "bg-red-500/10 hover:bg-red-500/20 text-red-400 border-red-500/20 shadow-sm" 
+                  : "bg-red-50 hover:bg-red-100 text-red-600 border-red-100 shadow-xs"
               }`}
             >
-              <LogOut className="w-5 h-5" />
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Sair</span>
             </button>
           </div>
 
@@ -431,7 +590,47 @@ export default function Profile({
               >
                 <div className={`bg-white w-4 h-4 rounded-full shadow-md transition-transform ${
                   darkMode ? "translate-x-5" : "translate-x-0"
-                }`}></div>
+                 }`}></div>
+              </button>
+            </div>
+
+            <hr className={darkMode ? "border-zinc-800" : "border-gray-100"} />
+
+            <div className="flex items-center justify-between px-1">
+              <div className="flex items-center gap-2">
+                <CreditCard className="w-4 h-4 text-purple-500" />
+                <span className="text-xs font-semibold">Moeda Corrente</span>
+              </div>
+              <button
+                id="open-currency-modal-btn"
+                onClick={() => setShowCurrencyModal(true)}
+                className={`text-[11px] font-extrabold px-3 py-1.5 rounded-xl border transition ${
+                  darkMode
+                    ? "bg-zinc-850 border-zinc-700 hover:bg-zinc-800 text-purple-400"
+                    : "bg-slate-50 border-slate-200 hover:bg-slate-100 text-purple-700 shadow-sm"
+                }`}
+              >
+                {currency?.code} ({currency?.symbol})
+              </button>
+            </div>
+
+            <hr className={darkMode ? "border-zinc-800" : "border-gray-100"} />
+
+            <div className="flex items-center justify-between px-1">
+              <div className="flex items-center gap-2">
+                <Settings className="w-4 h-4 text-purple-500" />
+                <span className="text-xs font-semibold">Configurações da Conta</span>
+              </div>
+              <button
+                id="open-account-settings-btn"
+                onClick={() => setActiveSubSection("conta")}
+                className={`text-[11px] font-extrabold px-3 py-1.5 rounded-xl border transition ${
+                  darkMode
+                    ? "bg-zinc-850 border-zinc-700 hover:bg-zinc-800 text-purple-400"
+                    : "bg-slate-50 border-slate-200 hover:bg-slate-100 text-purple-700 shadow-sm"
+                }`}
+              >
+                Gerenciar Conta
               </button>
             </div>
 
@@ -598,7 +797,7 @@ export default function Profile({
                     </div>
 
                     <div className="flex justify-between text-[10px] font-mono mt-2 mb-1">
-                      <span>${g.currentAmount.toLocaleString()} / ${g.targetAmount.toLocaleString()}</span>
+                      <span>{formatCurrency(g.currentAmount, currency?.symbol)} / {formatCurrency(g.targetAmount, currency?.symbol)}</span>
                       <span>{percent.toFixed(0)}%</span>
                     </div>
 
@@ -641,7 +840,7 @@ export default function Profile({
                   </div>
 
                   <div className="flex items-center gap-3">
-                    <span className="text-xs font-extrabold font-mono text-red-500">-${r.amount}</span>
+                    <span className="text-xs font-extrabold font-mono text-red-500">-{formatCurrency(r.amount, currency?.symbol)}</span>
                     <button id={`delete-recurrent-btn-${r.id}`} onClick={() => handleDeleteRecurrent(r.id, r.title)} className="text-zinc-500 hover:text-red-500">
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -691,7 +890,7 @@ export default function Profile({
                   </div>
 
                   <div className="flex items-center gap-3">
-                    <span className="text-xs font-extrabold font-mono text-emerald-500">+${s.amount}</span>
+                    <span className="text-xs font-extrabold font-mono text-emerald-500">+{formatCurrency(s.amount, currency?.symbol)}</span>
                     <button id={`delete-service-btn-${s.id}`} onClick={() => handleDeleteService(s.id, s.title)} className="text-zinc-500 hover:text-red-500">
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -739,6 +938,195 @@ export default function Profile({
         </div>
       )}
 
+      {/* CONFIGURAÇÕES DA CONTA SUBSECTION */}
+      {activeSubSection === "conta" && (
+        <div className="space-y-5">
+          <div className="flex justify-between items-center pb-2 border-b border-zinc-800/10">
+            <button id="back-to-profile-from-account" onClick={() => {
+              setActiveSubSection("perfil");
+              setAccSuccessMsg(null);
+              setAccErrorMsg(null);
+            }} className="text-xs text-purple-600 font-bold">← Voltar</button>
+            <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider ${
+              isDemo ? "bg-emerald-500/10 text-emerald-500" : "bg-purple-500/10 text-purple-500"
+            }`}>
+              {isDemo ? "Modo Demonstrativo" : "Firebase Protegido"}
+            </span>
+          </div>
+
+          <div>
+            <h3 className="text-sm font-extrabold flex items-center gap-2"><Settings className="w-4.5 h-4.5 text-purple-500" /> Configurações de Conta</h3>
+            <p className={`text-[11px] leading-relaxed mt-1 ${darkMode ? "text-zinc-500" : "text-gray-400"}`}>
+              Gerencie seus dados pessoais, e-mail, senha de segurança e a moeda corrente padrão do sistema.
+            </p>
+          </div>
+
+          {/* Feedback messages */}
+          {accSuccessMsg && (
+            <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-xs rounded-2xl flex items-start gap-2.5 animate-fadeIn">
+              <CheckCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span className="font-semibold">{accSuccessMsg}</span>
+            </div>
+          )}
+
+          {accErrorMsg && (
+            <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs rounded-2xl flex items-start gap-2.5 animate-fadeIn">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span className="font-semibold">{accErrorMsg}</span>
+            </div>
+          )}
+
+          {/* 1. MUDANÇA DE MOEDA / MOEDA CORRENTE */}
+          <div className={`p-4 rounded-3xl border space-y-3.5 ${
+            darkMode ? "bg-zinc-900 border-zinc-800" : "bg-white border-gray-100 shadow-sm"
+          }`}>
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <span className="text-[10px] uppercase font-extrabold tracking-wider opacity-50 block">Moeda do Sistema</span>
+                <span className="text-xs font-bold block">{currency?.name} ({currency?.code})</span>
+              </div>
+              <button
+                id="change-currency-account-btn"
+                onClick={() => setShowCurrencyModal(true)}
+                className="bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-extrabold py-2 px-3.5 rounded-xl transition duration-150 active:scale-95 flex items-center gap-1.5"
+              >
+                <RefreshCw className="w-3.5 h-3.5" /> Alterar Moeda
+              </button>
+            </div>
+          </div>
+
+          {/* 2. ALTERAR NOME COMPLETO */}
+          <div className={`p-4 rounded-3xl border space-y-3.5 ${
+            darkMode ? "bg-zinc-900 border-zinc-800" : "bg-white border-gray-100 shadow-sm"
+          }`}>
+            <h4 className="font-extrabold text-xs uppercase tracking-wider opacity-60 flex items-center gap-1.5"><User className="w-4 h-4 text-purple-500" /> Nome Completo</h4>
+            <form onSubmit={handleUpdateAccountName} className="space-y-3">
+              <div>
+                <input
+                  id="account-name-input"
+                  type="text"
+                  required
+                  placeholder="Seu nome"
+                  value={accName}
+                  onChange={(e) => setAccName(e.target.value)}
+                  className={`w-full px-4 py-3 text-xs rounded-xl border focus:outline-none focus:ring-2 focus:ring-purple-500 transition ${
+                    darkMode 
+                      ? "bg-zinc-850 border-zinc-700 text-white focus:border-purple-500" 
+                      : "bg-slate-50 border-slate-200 text-slate-900 focus:border-purple-500"
+                  }`}
+                />
+              </div>
+              <button
+                id="submit-update-name-btn"
+                type="submit"
+                disabled={accLoading}
+                className="w-full bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold py-2.5 rounded-xl transition disabled:opacity-50"
+              >
+                {accLoading ? "Atualizando..." : "Salvar Nome"}
+              </button>
+            </form>
+          </div>
+
+          {/* 3. TROCA DE E-MAIL */}
+          <div className={`p-4 rounded-3xl border space-y-3.5 ${
+            darkMode ? "bg-zinc-900 border-zinc-800" : "bg-white border-gray-100 shadow-sm"
+          }`}>
+            <h4 className="font-extrabold text-xs uppercase tracking-wider opacity-60 flex items-center gap-1.5"><Mail className="w-4 h-4 text-purple-500" /> Endereço de E-mail</h4>
+            <form onSubmit={handleUpdateAccountEmail} className="space-y-3">
+              <div>
+                <input
+                  id="account-email-input"
+                  type="email"
+                  required
+                  placeholder="Seu e-mail"
+                  value={accEmail}
+                  onChange={(e) => setAccEmail(e.target.value)}
+                  className={`w-full px-4 py-3 text-xs rounded-xl border focus:outline-none focus:ring-2 focus:ring-purple-500 transition ${
+                    darkMode 
+                      ? "bg-zinc-850 border-zinc-700 text-white focus:border-purple-500" 
+                      : "bg-slate-50 border-slate-200 text-slate-900 focus:border-purple-500"
+                  }`}
+                />
+              </div>
+              <button
+                id="submit-update-email-btn"
+                type="submit"
+                disabled={accLoading}
+                className="w-full bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold py-2.5 rounded-xl transition disabled:opacity-50"
+              >
+                {accLoading ? "Atualizando..." : "Salvar E-mail"}
+              </button>
+            </form>
+          </div>
+
+          {/* 4. TROCA DE SENHA */}
+          <div className={`p-4 rounded-3xl border space-y-3.5 ${
+            darkMode ? "bg-zinc-900 border-zinc-800" : "bg-white border-gray-100 shadow-sm"
+          }`}>
+            <h4 className="font-extrabold text-xs uppercase tracking-wider opacity-60 flex items-center gap-1.5"><Lock className="w-4 h-4 text-purple-500" /> Alterar Senha de Segurança</h4>
+            <form onSubmit={handleUpdateAccountPassword} className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="relative">
+                  <span className={`absolute left-3.5 top-1/2 -translate-y-1/2 text-xs ${darkMode ? "text-slate-500" : "text-slate-400"}`}><Key className="w-3.5 h-3.5" /></span>
+                  <input
+                    id="account-password-input"
+                    type="password"
+                    placeholder="Nova Senha"
+                    value={accPassword}
+                    onChange={(e) => setAccPassword(e.target.value)}
+                    className={`w-full pl-9 pr-4 py-3 text-xs rounded-xl border focus:outline-none focus:ring-2 focus:ring-purple-500 transition ${
+                      darkMode 
+                        ? "bg-zinc-850 border-zinc-700 text-white focus:border-purple-500" 
+                        : "bg-slate-50 border-slate-200 text-slate-900 focus:border-purple-500"
+                    }`}
+                  />
+                </div>
+                <div className="relative">
+                  <span className={`absolute left-3.5 top-1/2 -translate-y-1/2 text-xs ${darkMode ? "text-slate-500" : "text-slate-400"}`}><Key className="w-3.5 h-3.5" /></span>
+                  <input
+                    id="account-confirm-password-input"
+                    type="password"
+                    placeholder="Confirmar Nova Senha"
+                    value={accConfirmPassword}
+                    onChange={(e) => setAccConfirmPassword(e.target.value)}
+                    className={`w-full pl-9 pr-4 py-3 text-xs rounded-xl border focus:outline-none focus:ring-2 focus:ring-purple-500 transition ${
+                      darkMode 
+                        ? "bg-zinc-850 border-zinc-700 text-white focus:border-purple-500" 
+                        : "bg-slate-50 border-slate-200 text-slate-900 focus:border-purple-500"
+                    }`}
+                  />
+                </div>
+              </div>
+              <button
+                id="submit-update-password-btn"
+                type="submit"
+                disabled={accLoading}
+                className="w-full bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold py-2.5 rounded-xl transition disabled:opacity-50"
+              >
+                {accLoading ? "Atualizando..." : "Salvar Nova Senha"}
+              </button>
+            </form>
+          </div>
+
+          {/* 5. LOGOUT DA CONTA */}
+          <div className={`p-4 rounded-3xl border border-dashed space-y-3.5 ${
+            darkMode ? "bg-red-500/5 border-red-500/20" : "bg-red-50/30 border-red-200 shadow-xs"
+          }`}>
+            <h4 className="font-extrabold text-xs uppercase tracking-wider text-rose-500 flex items-center gap-1.5"><LogOut className="w-4 h-4" /> Sair do Aplicativo</h4>
+            <p className={`text-[11px] leading-relaxed ${darkMode ? "text-zinc-500" : "text-gray-400"}`}>
+              Desconectar-se com segurança do seu perfil atual e retornar à página de login.
+            </p>
+            <button
+              id="account-logout-btn"
+              onClick={handleLogout}
+              className="w-full bg-red-600 hover:bg-red-700 active:scale-95 text-white text-[10px] font-bold py-2.5 rounded-xl transition duration-150"
+            >
+              Fazer Logout (Desconectar)
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ADD GOAL MODAL */}
       {showAddGoalModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end justify-center">
@@ -755,7 +1143,7 @@ export default function Profile({
                 <input id="goal-title-input" type="text" required placeholder="Ex: Viagem de Férias" value={goalTitle} onChange={e => setGoalTitle(e.target.value)} className="w-full px-4 py-3 text-xs rounded-xl border" />
               </div>
               <div>
-                <label className="block text-xs font-semibold mb-1">Valor Alvo ($)</label>
+                <label className="block text-xs font-semibold mb-1">Valor Alvo ({currency?.symbol || "$"}) *</label>
                 <input id="goal-target-input" type="number" required placeholder="Ex: 5000" value={goalTarget} onChange={e => setGoalTarget(e.target.value)} className="w-full px-4 py-3 text-xs rounded-xl border" />
               </div>
               <div>
@@ -785,7 +1173,7 @@ export default function Profile({
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold mb-1">Valor Mensal ($)</label>
+                  <label className="block text-xs font-semibold mb-1">Valor Mensal ({currency?.symbol || "$"}) *</label>
                   <input id="recurrent-amount-input" type="number" required placeholder="0.00" value={recurrentAmount} onChange={e => setRecurrentAmount(e.target.value)} className="w-full px-4 py-3 text-xs rounded-xl border" />
                 </div>
                 <div>
@@ -820,7 +1208,7 @@ export default function Profile({
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold mb-1">Valor do Serviço ($)</label>
+                  <label className="block text-xs font-semibold mb-1">Valor do Serviço ({currency?.symbol || "$"}) *</label>
                   <input id="service-amount-input" type="number" required placeholder="350.00" value={serviceAmount} onChange={e => setServiceAmount(e.target.value)} className="w-full px-4 py-3 text-xs rounded-xl border" />
                 </div>
                 <div>
@@ -885,11 +1273,11 @@ export default function Profile({
           }`}>
             <h3 className="font-extrabold text-sm mb-2 text-purple-500">Poupar para Meta</h3>
             <p className={`text-xs mb-4 leading-relaxed ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
-              Defina o novo valor acumulado para a meta <strong>{goalProgressToUpdate.title}</strong> (Alvo: ${goalProgressToUpdate.target.toLocaleString()}):
+              Defina o novo valor acumulado para a meta <strong>{goalProgressToUpdate.title}</strong> (Alvo: {formatCurrency(goalProgressToUpdate.target, currency?.symbol)}):
             </p>
             <form onSubmit={submitGoalProgressUpdate} className="space-y-4">
               <div className="relative">
-                <span className={`absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold ${darkMode ? "text-slate-500" : "text-slate-400"}`}>$</span>
+                <span className={`absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold ${darkMode ? "text-slate-500" : "text-slate-400"}`}>{currency?.symbol || "$"}</span>
                 <input
                   id="goal-progress-update-input"
                   type="number"
@@ -959,6 +1347,83 @@ export default function Profile({
               >
                 Excluir
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SEARCHABLE WORLD CURRENCY SELECTOR MODAL */}
+      {showCurrencyModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end justify-center">
+          <div className={`w-full max-w-md p-6 rounded-t-3xl border-t animate-slideUp max-h-[90vh] overflow-y-auto ${
+            darkMode ? "bg-zinc-900 border-zinc-800 text-white" : "bg-white border-gray-200 text-gray-900"
+          }`}>
+            <div className="flex justify-between items-center mb-5 pb-3 border-b border-zinc-800/10">
+              <h3 className="font-bold text-base">Selecionar Moeda Corrente</h3>
+              <button
+                id="close-currency-modal-btn"
+                onClick={() => {
+                  setShowCurrencyModal(false);
+                  setCurrencySearch("");
+                }}
+                className={`p-1.5 rounded-full transition ${
+                  darkMode ? "hover:bg-zinc-800 text-zinc-400" : "hover:bg-gray-100 text-gray-500"
+                }`}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="mb-4">
+              <input
+                id="currency-search-input"
+                type="text"
+                placeholder="Buscar por país, símbolo ou código (ex: Real, USD, €)..."
+                value={currencySearch}
+                onChange={(e) => setCurrencySearch(e.target.value)}
+                className={`w-full px-4 py-3 text-xs rounded-xl border focus:outline-none focus:ring-2 focus:ring-purple-600 transition ${
+                  darkMode 
+                    ? "bg-zinc-800 border-zinc-700 text-white focus:border-purple-500" 
+                    : "bg-gray-50 border-gray-200 text-gray-900 focus:border-purple-600"
+                }`}
+              />
+            </div>
+
+            <div className="space-y-1.5 max-h-[50vh] overflow-y-auto no-scrollbar pr-1">
+              {filteredCurrencies.map((curr) => {
+                const isSelected = curr.code === currency?.code;
+                return (
+                  <button
+                    key={curr.code}
+                    id={`currency-option-${curr.code}`}
+                    onClick={() => {
+                      if (onChangeCurrency) {
+                        onChangeCurrency(curr);
+                      }
+                      setShowCurrencyModal(false);
+                      setCurrencySearch("");
+                    }}
+                    className={`w-full p-3 text-xs font-semibold rounded-xl border flex items-center justify-between transition ${
+                      isSelected
+                        ? "bg-purple-600 text-white border-purple-600 shadow-sm"
+                        : darkMode
+                          ? "bg-zinc-800/50 border-zinc-800 hover:bg-zinc-800"
+                          : "bg-gray-50 border-gray-100 hover:bg-gray-100"
+                    }`}
+                  >
+                    <div className="text-left">
+                      <p className="font-bold">{curr.name}</p>
+                      <p className={`text-[10px] mt-0.5 ${isSelected ? "text-purple-200" : "text-zinc-500"}`}>
+                        Código: {curr.code}
+                      </p>
+                    </div>
+                    <span className="font-mono font-black text-sm">{curr.symbol}</span>
+                  </button>
+                );
+              })}
+              {filteredCurrencies.length === 0 && (
+                <p className="text-center py-6 text-xs text-zinc-500">Nenhuma moeda encontrada.</p>
+              )}
             </div>
           </div>
         </div>

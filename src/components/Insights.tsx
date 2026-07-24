@@ -104,7 +104,7 @@ export default function Insights({ darkMode, balance, totalIncome, totalExpense,
         <div className="flex flex-col items-center justify-center py-8">
           <Sparkles className="w-8 h-8 text-purple-600 animate-spin mb-2" />
           <p className={`text-xs ${darkMode ? "text-zinc-400" : "text-gray-500"}`}>
-            Contador está analisando seus dados...
+            Kathleen Contadora está analisando seus dados...
           </p>
         </div>
       ) : error ? (
@@ -136,7 +136,7 @@ export default function Insights({ darkMode, balance, totalIncome, totalExpense,
             <div className="space-y-1.5">
               <span className={`text-[10px] font-extrabold uppercase tracking-wider ${
                 darkMode ? "text-zinc-500" : "text-gray-400"
-              }`}>Alertas do Contador</span>
+              }`}>Alertas da Kathleen</span>
               <div className="space-y-2">
                 {analysis.alerts.map((alert: string, index: number) => (
                   <div key={index} className={`p-3 rounded-xl text-xs flex items-start gap-2 border ${

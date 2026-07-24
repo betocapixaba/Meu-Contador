@@ -24,6 +24,7 @@ import ReceiptScanner from "./components/ReceiptScanner";
 import { Transaction, Goal, RecurrentExpense } from "./types";
 import { checkSmartAlerts } from "./notifications";
 import { seedInitialDemoData } from "./utils/demoDb";
+import { Currency } from "./utils/currency";
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -35,6 +36,21 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState<string>("Início");
   
+  const [currency, setCurrency] = useState<Currency>(() => {
+    const saved = localStorage.getItem("contador_ia_currency");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return { code: "BRL", symbol: "R$", name: "Real brasileiro (R$)" };
+  });
+
+  const handleCurrencyChange = (newCurrency: Currency) => {
+    setCurrency(newCurrency);
+    localStorage.setItem("contador_ia_currency", JSON.stringify(newCurrency));
+  };
+  
   // App data states
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
@@ -45,6 +61,76 @@ export default function App() {
   const [showVoiceModal, setShowVoiceModal] = useState(false);
   const [showScanModal, setShowScanModal] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+
+  // Read logout success flag from localStorage
+  useEffect(() => {
+    const showToast = localStorage.getItem("show_logout_success_toast");
+    if (showToast === "true") {
+      setToast({ message: "Você foi desconectado com sucesso.", type: "success" });
+      localStorage.removeItem("show_logout_success_toast");
+    }
+  }, [user]);
+
+  // Auto-dismiss toast
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => {
+        setToast(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
+  // Unified secure logout execution
+  const handleLogoutAction = async () => {
+    setShowLogoutConfirm(false);
+    try {
+      // 1. Clear session storage
+      sessionStorage.clear();
+      
+      // 2. Clear user-specific localStorage items
+      const keysToRemove = [
+        "contador_ia_demo_mode",
+        "contador_ia_demo_display_name",
+        "contador_ia_demo_email",
+        "demo_transactions",
+        "demo_goals",
+        "demo_recurrentExpenses",
+        "demo_services",
+        "demo_clients",
+        "notified_goals_completed"
+      ];
+      keysToRemove.forEach(key => localStorage.removeItem(key));
+      
+      // Also clear keys starting with "notified_bills_"
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith("notified_bills_")) {
+          localStorage.removeItem(key);
+        }
+      }
+
+      // 3. Reset application state management
+      setTransactions([]);
+      setGoals([]);
+      setRecurrentExpenses([]);
+      
+      // Set the success toast flag before signOut or reload
+      localStorage.setItem("show_logout_success_toast", "true");
+
+      const isDemo = localStorage.getItem("contador_ia_demo_mode") === "true" || user?.uid === "local-demo-user";
+      if (isDemo) {
+        setUser(null);
+        window.location.reload();
+      } else {
+        await auth.signOut();
+      }
+    } catch (err: any) {
+      console.error("Error signing out:", err);
+      setToast({ message: "Não foi possível sair. Tente novamente.", type: "error" });
+    }
+  };
 
   // Toggle theme
   const toggleDarkMode = () => {
@@ -263,7 +349,7 @@ export default function App() {
         <div className="w-16 h-16 bg-purple-600 rounded-3xl flex items-center justify-center shadow-lg shadow-purple-600/35 animate-bounce mb-4">
           <Sparkles className="w-8 h-8 text-white animate-spin" />
         </div>
-        <p className="text-sm font-semibold tracking-wide">Meu Contador IA</p>
+        <p className="text-sm font-semibold tracking-wide">Kathleen Contadora</p>
         <p className="text-xs text-zinc-500 mt-1">Carregando carteira digital...</p>
       </div>
     );
@@ -311,26 +397,26 @@ export default function App() {
 
         {/* Side Info Panel on Desktop */}
         <div className="hidden lg:flex flex-col justify-center max-w-sm ml-12 text-left shrink-0">
-          <div className="inline-block self-start bg-indigo-500/10 text-indigo-400 px-4 py-1.5 rounded-full text-xs font-bold mb-4 tracking-widest uppercase">
+          <div className="inline-block self-start bg-purple-500/10 text-purple-400 px-4 py-1.5 rounded-full text-xs font-bold mb-4 tracking-widest uppercase">
             PWA Financeiro
           </div>
           <h1 className="text-4xl font-black text-white mb-6 leading-tight tracking-tight">
-            Meu Contador IA
+            Kathleen Contadora
           </h1>
           <p className="text-slate-400 mb-8 leading-relaxed font-medium text-sm">
             Gestão financeira profissional na palma da mão. Controle despesas, receitas e investimentos apenas usando sua voz.
           </p>
           <div className="space-y-4">
             <div className="flex items-center gap-3">
-              <div className="w-6 h-6 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-450 dark:text-indigo-400 font-extrabold text-xs shrink-0">✓</div>
+              <div className="w-6 h-6 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-500 dark:text-purple-400 font-extrabold text-xs shrink-0">✓</div>
               <p className="text-slate-300 text-sm font-bold">Inteligência Artificial Gemini</p>
             </div>
             <div className="flex items-center gap-3">
-              <div className="w-6 h-6 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-450 dark:text-indigo-400 font-extrabold text-xs shrink-0">✓</div>
+              <div className="w-6 h-6 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-500 dark:text-purple-400 font-extrabold text-xs shrink-0">✓</div>
               <p className="text-slate-300 text-sm font-bold">Sincronização Cloud Firestore</p>
             </div>
             <div className="flex items-center gap-3">
-              <div className="w-6 h-6 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-450 dark:text-indigo-400 font-extrabold text-xs shrink-0">✓</div>
+              <div className="w-6 h-6 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-500 dark:text-purple-400 font-extrabold text-xs shrink-0">✓</div>
               <p className="text-slate-300 text-sm font-bold">Interface Mobile First Moderna</p>
             </div>
           </div>
@@ -367,53 +453,53 @@ export default function App() {
         </div>
 
         {/* Upper Header / Greeting */}
-        <header className={`px-6 py-4 border-b flex justify-between items-center z-10 shrink-0 ${
+        <header className={`px-4 py-3 md:px-6 md:py-4 border-b flex justify-between items-center z-10 shrink-0 ${
           darkMode ? "bg-slate-950/20 border-slate-900" : "bg-white border-slate-100 shadow-xs"
         }`}>
           <div 
             onClick={() => setActiveTab("Perfil")}
-            className="flex items-center gap-2.5 cursor-pointer hover:opacity-85 active:scale-98 transition-all"
+            className="flex items-center gap-2 md:gap-2.5 cursor-pointer hover:opacity-85 active:scale-98 transition-all shrink-0"
             title="Ver Perfil & Configurações"
           >
-            <div className={`w-10 h-10 bg-gradient-to-tr from-indigo-500 to-purple-500 rounded-full flex items-center justify-center text-white font-black shadow-md shrink-0 text-xs transition-all ${
-              activeTab === "Perfil" ? "ring-2 ring-indigo-500 ring-offset-2 ring-offset-slate-900" : "shadow-indigo-500/15"
+            <div className={`w-9 h-9 md:w-10 md:h-10 bg-gradient-to-tr from-purple-500 to-purple-600 rounded-full flex items-center justify-center text-white font-black shadow-md shrink-0 text-xs transition-all ${
+              activeTab === "Perfil" ? "ring-2 ring-purple-500 ring-offset-2 ring-offset-slate-900" : "shadow-purple-500/15"
             }`}>
               {user?.displayName?.substring(0, 2).toUpperCase() || "ED"}
             </div>
-            <div>
-              <p className={`text-[9px] uppercase tracking-wider font-extrabold leading-none ${
-                darkMode ? "text-indigo-400" : "text-indigo-600"
+            <div className="min-w-0">
+              <p className={`text-[8px] md:text-[9px] uppercase tracking-wider font-extrabold leading-none ${
+                darkMode ? "text-purple-400" : "text-purple-600"
               }`}>Ver Perfil ⚙️</p>
-              <h1 className="text-sm font-bold leading-tight mt-0.5 text-slate-900 dark:text-white">
+              <h1 className="text-xs md:text-sm font-bold leading-tight mt-0.5 text-slate-900 dark:text-white truncate max-w-[80px] xs:max-w-[120px] md:max-w-none">
                 {user?.displayName?.split(" ")[0] || "Visitante"}
               </h1>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
             <button
               id="header-scan-shortcut-btn"
               onClick={() => setShowScanModal(true)}
-              className={`p-2 rounded-xl border transition-all duration-200 active:scale-90 ${
+              className={`p-1.5 md:p-2 rounded-xl border transition-all duration-200 active:scale-90 shrink-0 ${
                 darkMode 
                   ? "bg-slate-850 border-slate-800 text-slate-300 hover:text-white" 
-                  : "bg-slate-50 border-slate-200 text-slate-700 hover:text-indigo-600 shadow-xs"
+                  : "bg-slate-50 border-slate-200 text-slate-700 hover:text-purple-600 shadow-xs"
               }`}
             >
-              <Camera className="w-4 h-4" />
+              <Camera className="w-3.5 h-3.5 md:w-4 md:h-4" />
             </button>
             
             <button
               id="header-refresh-btn"
               onClick={fetchData}
               disabled={dataLoading}
-              className={`p-2 rounded-xl border transition-all duration-200 active:scale-90 ${
+              className={`p-1.5 md:p-2 rounded-xl border transition-all duration-200 active:scale-90 shrink-0 ${
                 darkMode 
                   ? "bg-slate-850 border-slate-800 text-slate-300" 
                   : "bg-slate-50 border-slate-200 text-slate-700 shadow-xs"
               }`}
             >
-              <RefreshCw className={`w-4 h-4 ${dataLoading ? "animate-spin text-indigo-500" : ""}`} />
+              <RefreshCw className={`w-3.5 h-3.5 md:w-4 md:h-4 ${dataLoading ? "animate-spin text-purple-500" : ""}`} />
             </button>
 
             <button
@@ -422,13 +508,14 @@ export default function App() {
                 setShowLogoutConfirm(true);
               }}
               title="Sair / Fazer Log out"
-              className={`p-2 rounded-xl border transition-all duration-200 active:scale-90 ${
+              className={`flex items-center gap-1 px-2.5 py-1.5 md:px-3 md:py-1.5 rounded-xl border transition-all duration-200 active:scale-90 text-[10px] font-extrabold shrink-0 ${
                 darkMode 
-                  ? "bg-slate-850 border-slate-800 text-red-400 hover:text-red-300 hover:bg-red-950/20 hover:border-red-900/30" 
-                  : "bg-slate-50 border-slate-200 text-red-500 hover:bg-red-50 hover:border-red-200 shadow-xs"
+                  ? "bg-red-500/10 border-red-500/20 text-red-400 hover:text-red-300 hover:bg-red-950/20 shadow-sm" 
+                  : "bg-red-50 border-red-100 text-red-600 hover:bg-red-100/70 shadow-xs"
               }`}
             >
-              <LogOut className="w-4 h-4" />
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Sair</span>
             </button>
           </div>
         </header>
@@ -444,6 +531,7 @@ export default function App() {
               onSelectTab={setActiveTab}
               goals={goals}
               onRefresh={fetchData}
+              currency={currency}
             />
           )}
 
@@ -453,6 +541,7 @@ export default function App() {
               transactions={transactions} 
               initialType="receita"
               onRefresh={fetchData}
+              currency={currency}
             />
           )}
 
@@ -462,6 +551,7 @@ export default function App() {
               transactions={transactions} 
               initialType="despesa"
               onRefresh={fetchData}
+              currency={currency}
             />
           )}
 
@@ -469,6 +559,7 @@ export default function App() {
             <Reports 
               darkMode={darkMode} 
               transactions={transactions} 
+              currency={currency}
             />
           )}
 
@@ -478,6 +569,9 @@ export default function App() {
               onToggleDarkMode={toggleDarkMode}
               goals={goals}
               onRefreshGoals={fetchData}
+              currency={currency}
+              onChangeCurrency={handleCurrencyChange}
+              onLogoutClick={() => setShowLogoutConfirm(true)}
             />
           )}
         </main>
@@ -487,7 +581,7 @@ export default function App() {
           <button
             id="global-floating-mic-btn"
             onClick={() => setShowVoiceModal(true)}
-            className="w-15 h-15 bg-gradient-to-b from-indigo-500 to-indigo-700 text-white rounded-full flex items-center justify-center shadow-lg shadow-indigo-600/35 hover:scale-105 active:scale-95 transition border-4 border-white dark:border-slate-900"
+            className="w-15 h-15 bg-gradient-to-b from-purple-500 to-purple-700 text-white rounded-full flex items-center justify-center shadow-lg shadow-purple-600/35 hover:scale-105 active:scale-95 transition border-4 border-white dark:border-slate-900"
           >
             <Sparkles className="w-6 h-6 animate-pulse" />
           </button>
@@ -502,7 +596,7 @@ export default function App() {
               id="nav-inicio-btn"
               onClick={() => setActiveTab("Início")}
               className={`flex flex-col items-center gap-1 transition ${
-                activeTab === "Início" ? "text-indigo-600 dark:text-indigo-400 font-bold" : darkMode ? "text-slate-500 hover:text-white" : "text-slate-400 hover:text-slate-900"
+                activeTab === "Início" ? "text-purple-600 dark:text-purple-400 font-bold" : darkMode ? "text-slate-500 hover:text-white" : "text-slate-400 hover:text-slate-900"
               }`}
             >
               <Home className="w-5 h-5 mt-1" />
@@ -513,7 +607,7 @@ export default function App() {
               id="nav-receitas-btn"
               onClick={() => setActiveTab("Receitas")}
               className={`flex flex-col items-center gap-1 transition ${
-                activeTab === "Receitas" ? "text-indigo-600 dark:text-indigo-400 font-bold" : darkMode ? "text-slate-500 hover:text-white" : "text-slate-400 hover:text-slate-900"
+                activeTab === "Receitas" ? "text-purple-600 dark:text-purple-400 font-bold" : darkMode ? "text-slate-500 hover:text-white" : "text-slate-400 hover:text-slate-900"
               }`}
             >
               <ArrowUpRight className="w-5 h-5 mt-1" />
@@ -523,15 +617,15 @@ export default function App() {
             {/* Spacer for voice mic trigger */}
             <div className="w-full flex flex-col items-center justify-end pb-1 h-full">
               <span className={`text-[8px] font-black uppercase tracking-widest ${
-                darkMode ? "text-indigo-400" : "text-indigo-600"
-              }`}>Contador</span>
+                darkMode ? "text-purple-400" : "text-purple-600"
+              }`}>Kathleen</span>
             </div>
 
             <button
               id="nav-despesas-btn"
               onClick={() => setActiveTab("Despesas")}
               className={`flex flex-col items-center gap-1 transition ${
-                activeTab === "Despesas" ? "text-indigo-600 dark:text-indigo-400 font-bold" : darkMode ? "text-slate-500 hover:text-white" : "text-slate-400 hover:text-slate-900"
+                activeTab === "Despesas" ? "text-purple-600 dark:text-purple-400 font-bold" : darkMode ? "text-slate-500 hover:text-white" : "text-slate-400 hover:text-slate-900"
               }`}
             >
               <ArrowDownLeft className="w-5 h-5 mt-1" />
@@ -542,7 +636,7 @@ export default function App() {
               id="nav-relatorios-btn"
               onClick={() => setActiveTab("Relatórios")}
               className={`flex flex-col items-center gap-1 transition ${
-                activeTab === "Relatórios" ? "text-indigo-600 dark:text-indigo-400 font-bold" : darkMode ? "text-slate-500 hover:text-white" : "text-slate-400 hover:text-slate-900"
+                activeTab === "Relatórios" ? "text-purple-600 dark:text-purple-400 font-bold" : darkMode ? "text-slate-500 hover:text-white" : "text-slate-400 hover:text-slate-900"
               }`}
             >
               <FileText className="w-5 h-5 mt-1" />
@@ -585,9 +679,9 @@ export default function App() {
             <div className={`w-full max-w-xs p-5 rounded-3xl border shadow-2xl animate-slideUp ${
               darkMode ? "bg-slate-900 border-slate-800 text-white" : "bg-white border-slate-100 text-slate-900"
             }`}>
-              <h3 className="font-extrabold text-sm mb-2 text-rose-500">Sair do Aplicativo?</h3>
+              <h3 className="font-extrabold text-sm mb-2 text-rose-500">Sair da Conta (Logout)</h3>
               <p className={`text-xs mb-5 leading-relaxed ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
-                Deseja mesmo sair do aplicativo? Sua sessão será finalizada.
+                Are you sure you want to sign out? (Tem certeza que deseja sair?)
               </p>
               <div className="flex gap-2">
                 <button
@@ -603,21 +697,36 @@ export default function App() {
                 </button>
                 <button
                   id="confirm-logout-modal-btn"
-                  onClick={() => {
-                    setShowLogoutConfirm(false);
-                    const isDemo = localStorage.getItem("contador_ia_demo_mode") === "true";
-                    if (isDemo) {
-                      localStorage.removeItem("contador_ia_demo_mode");
-                      window.location.reload();
-                    } else {
-                      auth.signOut();
-                    }
-                  }}
-                  className="flex-1 py-2.5 text-[11px] font-bold rounded-xl bg-rose-600 hover:bg-rose-700 text-white transition active:scale-95 animate-pulse"
+                  onClick={handleLogoutAction}
+                  className="flex-1 py-2.5 text-[11px] font-bold rounded-xl bg-rose-600 hover:bg-rose-700 text-white transition active:scale-95"
                 >
-                  Sair
+                  Sair (Logout)
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* TOAST NOTIFICATION */}
+        {toast && (
+          <div className="absolute top-16 left-4 right-4 z-50 animate-slideDown pointer-events-none">
+            <div className={`p-3.5 rounded-2xl border shadow-xl flex items-center gap-2.5 backdrop-blur-md ${
+              toast.type === "success"
+                ? darkMode
+                  ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
+                  : "bg-emerald-50 border-emerald-200 text-emerald-800 shadow-emerald-100"
+                : darkMode
+                  ? "bg-rose-500/15 border-rose-500/30 text-rose-400"
+                  : "bg-rose-50 border-rose-200 text-rose-800 shadow-rose-100"
+            }`}>
+              <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${
+                toast.type === "success" 
+                  ? "bg-emerald-500/20 text-emerald-400" 
+                  : "bg-rose-500/20 text-rose-400"
+              }`}>
+                {toast.type === "success" ? "✓" : "⚠"}
+              </div>
+              <span className="text-xs font-bold leading-tight">{toast.message}</span>
             </div>
           </div>
         )}
@@ -625,26 +734,26 @@ export default function App() {
 
       {/* Side Info (Desktop context) */}
       <div className="hidden lg:flex flex-col justify-center max-w-sm ml-12 text-left shrink-0">
-        <div className="inline-block self-start bg-indigo-500/10 text-indigo-450 dark:text-indigo-400 px-4 py-1 rounded-full text-xs font-bold mb-4 tracking-widest uppercase">
+        <div className="inline-block self-start bg-purple-500/10 text-purple-400 px-4 py-1 rounded-full text-xs font-bold mb-4 tracking-widest uppercase">
           PWA Financeiro
         </div>
         <h1 className="text-4xl font-black text-white mb-6 leading-tight tracking-tight">
-          Meu Contador IA
+          Kathleen Contadora
         </h1>
         <p className="text-slate-400 mb-8 leading-relaxed font-medium text-sm">
           Gestão financeira profissional na palma da mão. Controle despesas, receitas e investimentos apenas usando sua voz.
         </p>
         <div className="space-y-4">
           <div className="flex items-center gap-3">
-            <div className="w-6 h-6 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-450 dark:text-indigo-400 font-extrabold text-xs shrink-0">✓</div>
+            <div className="w-6 h-6 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-500 dark:text-purple-400 font-extrabold text-xs shrink-0">✓</div>
             <p className="text-slate-300 text-sm font-bold">Inteligência Artificial Gemini</p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="w-6 h-6 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-450 dark:text-indigo-400 font-extrabold text-xs shrink-0">✓</div>
+            <div className="w-6 h-6 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-500 dark:text-purple-400 font-extrabold text-xs shrink-0">✓</div>
             <p className="text-slate-300 text-sm font-bold">Sincronização Cloud Firestore</p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="w-6 h-6 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-450 dark:text-indigo-400 font-extrabold text-xs shrink-0">✓</div>
+            <div className="w-6 h-6 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-500 dark:text-purple-400 font-extrabold text-xs shrink-0">✓</div>
             <p className="text-slate-300 text-sm font-bold">Interface Mobile First Moderna</p>
           </div>
         </div>
