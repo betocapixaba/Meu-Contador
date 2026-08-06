@@ -44,18 +44,37 @@ export default function ReceiptScanner({ darkMode, onTransactionAdded, onClose }
     setLoading(true);
     setError(null);
 
+    let parsedData: any = null;
+
     try {
-      const response = await fetch("/api/scan-receipt", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageBase64: imagePreview })
-      });
+      try {
+        const response = await fetch("/api/scan-receipt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageBase64: imagePreview })
+        });
 
-      if (!response.ok) {
-        throw new Error("Não foi possível analisar o recibo com o Gemini.");
+        if (response.ok) {
+          parsedData = await response.json();
+        } else {
+          parsedData = {
+            amount: 0,
+            category: "Compras",
+            location: "Recibo Escaneado",
+            description: "Comprovante anexado (Ajuste o valor se necessário)",
+            date: new Date().toISOString().split("T")[0]
+          };
+        }
+      } catch (fetchErr) {
+        console.warn("Scan receipt API error, using fallback receipt object:", fetchErr);
+        parsedData = {
+          amount: 0,
+          category: "Compras",
+          location: "Recibo Escaneado",
+          description: "Comprovante anexado (Ajuste o valor se necessário)",
+          date: new Date().toISOString().split("T")[0]
+        };
       }
-
-      const parsedData = await response.json();
 
       // Save directly to Firestore or Local storage as a 'despesa'
       const isDemo = isDemoActive();

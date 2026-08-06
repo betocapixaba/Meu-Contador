@@ -16,6 +16,73 @@ export default function Insights({ darkMode, balance, totalIncome, totalExpense,
   const [analysis, setAnalysis] = useState<any | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const generateClientFallbackAnalysis = () => {
+    const netAmount = totalIncome - totalExpense;
+    const savingsRate = totalIncome > 0 ? (netAmount / totalIncome) * 100 : 0;
+    
+    let summary = "";
+    if (transactions.length === 0) {
+      summary = "Você ainda não possui lançamentos este mês. Que tal registrar sua primeira despesa ou receita para começar?";
+    } else if (totalIncome === 0 && totalExpense > 0) {
+      summary = `Você registrou R$ ${totalExpense.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} em despesas este mês. Lembre-se de registrar seus ganhos para acompanhar o saldo real!`;
+    } else if (netAmount < 0) {
+      summary = `Atenção: Suas despesas (R$ ${totalExpense.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}) superaram suas receitas (R$ ${totalIncome.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}) este mês. Reduza gastos não essenciais para equilibrar as contas.`;
+    } else {
+      summary = `Bom trabalho! Suas finanças estão no azul este mês. Você guardou R$ ${netAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} (cerca de ${savingsRate.toFixed(0)}% das suas receitas).`;
+    }
+
+    const alerts: string[] = [];
+    const expenseByCategory: Record<string, number> = {};
+    let totalComputedExpense = 0;
+    transactions.forEach((t: any) => {
+      if (t.type === "despesa") {
+        const category = t.category || "Outros";
+        expenseByCategory[category] = (expenseByCategory[category] || 0) + Number(t.amount || 0);
+        totalComputedExpense += Number(t.amount || 0);
+      }
+    });
+
+    let maxCategory = "";
+    let maxAmount = 0;
+    Object.entries(expenseByCategory).forEach(([cat, val]) => {
+      if (val > maxAmount) {
+        maxAmount = val;
+        maxCategory = cat;
+      }
+    });
+
+    if (maxAmount > 0 && totalComputedExpense > 0) {
+      const pct = (maxAmount / totalComputedExpense) * 100;
+      alerts.push(`Sua maior categoria de despesa é "${maxCategory}" (R$ ${maxAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}), representando ${pct.toFixed(0)}% dos seus gastos.`);
+    }
+
+    if (goals && goals.length > 0) {
+      goals.slice(0, 2).forEach((g: any) => {
+        const target = Number(g.targetAmount || 0);
+        const current = Number(g.currentAmount || 0);
+        if (target > 0) {
+          const pct = (current / target) * 100;
+          if (pct >= 100) {
+            alerts.push(`Parabéns! Você alcançou sua meta: "${g.title}"!`);
+          } else if (pct >= 80) {
+            alerts.push(`Você está muito perto! Já alcançou ${pct.toFixed(0)}% da sua meta "${g.title}".`);
+          }
+        }
+      });
+    }
+
+    if (alerts.length === 0) {
+      alerts.push("Suas contas estão equilibradas. Mantenha os registros atualizados!");
+    }
+
+    return {
+      summary,
+      alerts,
+      tip: "Mantenha a constância no registro diário dos seus gastos para manter controle total do seu orçamento.",
+      motivation: "Pequenas economias diárias constroem a liberdade financeira do amanhã."
+    };
+  };
+
   const fetchAnalysis = async () => {
     setLoading(true);
     setError(null);
@@ -49,14 +116,15 @@ export default function Insights({ darkMode, balance, totalIncome, totalExpense,
       });
 
       if (!response.ok) {
-        throw new Error("Não foi possível gerar análise financeira.");
+        throw new Error("Servidor indisponível");
       }
 
       const data = await response.json();
       setAnalysis(data);
     } catch (err: any) {
-      console.error(err);
-      setError("Falha ao atualizar os insights inteligentes da IA. Verifique sua conexão offline.");
+      console.warn("API fetch error, generating local fallback analysis:", err);
+      const fallbackData = generateClientFallbackAnalysis();
+      setAnalysis(fallbackData);
     } finally {
       setLoading(false);
     }

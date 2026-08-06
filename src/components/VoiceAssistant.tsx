@@ -93,11 +93,62 @@ export default function VoiceAssistant({ darkMode, onTransactionAdded, onClose }
     }
   };
 
+  const localParseCommand = (text: string) => {
+    const lower = text.toLowerCase().trim();
+    let type: "receita" | "despesa" = "despesa";
+    const revenueKeywords = ["recebi", "ganhei", "receita", "salario", "salário", "ganho", "pix de", "vendi", "faturei", "entrada"];
+    for (const kw of revenueKeywords) {
+      if (lower.includes(kw)) {
+        type = "receita";
+        break;
+      }
+    }
+
+    const numbers = lower.match(/(?:r\$\s*|\$\s*)?(\d+(?:\.\d{3})*(?:,\d{1,2})?|\d+(?:\.\d+)?)/gi);
+    let amount = 0;
+    if (numbers) {
+      for (const numStr of numbers) {
+        let cleaned = numStr.replace(/r\$/g, "").replace(/\$/g, "").replace(/\s/g, "").trim();
+        if (cleaned.includes(",") && cleaned.includes(".")) {
+          cleaned = cleaned.replace(/\./g, "").replace(/,/g, ".");
+        } else if (cleaned.includes(",")) {
+          cleaned = cleaned.replace(/,/g, ".");
+        }
+        const val = parseFloat(cleaned);
+        if (!isNaN(val) && val > 0) {
+          amount = val;
+          break;
+        }
+      }
+    }
+
+    let category = "Outros";
+    if (lower.includes("almoço") || lower.includes("jantar") || lower.includes("comer") || lower.includes("mercado") || lower.includes("padaria") || lower.includes("dunkin")) category = "Alimentação";
+    else if (lower.includes("uber") || lower.includes("gasolina") || lower.includes("ônibus") || lower.includes("onibus") || lower.includes("taxi")) category = "Transporte";
+    else if (lower.includes("aluguel") || lower.includes("luz") || lower.includes("agua") || lower.includes("água") || lower.includes("internet")) category = "Moradia";
+    else if (lower.includes("salario") || lower.includes("salário")) category = "Salário";
+    else if (lower.includes("cinema") || lower.includes("show") || lower.includes("bar")) category = "Lazer";
+    else if (lower.includes("farmacia") || lower.includes("farmácia") || lower.includes("médico")) category = "Saúde";
+
+    return {
+      type,
+      amount,
+      category,
+      location: null,
+      client: null,
+      description: text,
+      date: new Date().toISOString().split("T")[0],
+      isRecurrent: false
+    };
+  };
+
   const processCommand = async (commandText: string) => {
     if (!commandText.trim()) return;
     setLoading(true);
     setError(null);
     setSuccessData(null);
+
+    let parsedData: any = null;
 
     try {
       const response = await fetch("/api/parse-command", {
@@ -109,12 +160,17 @@ export default function VoiceAssistant({ darkMode, onTransactionAdded, onClose }
         })
       });
 
-      if (!response.ok) {
-        throw new Error("Falha ao analisar comando pelo assistente.");
+      if (response.ok) {
+        parsedData = await response.json();
+      } else {
+        parsedData = localParseCommand(commandText);
       }
+    } catch (err) {
+      console.warn("Parse API fetch error, using local fallback parser:", err);
+      parsedData = localParseCommand(commandText);
+    }
 
-      const parsedData = await response.json();
-      
+    try {
       // Save directly to Firestore if user is logged in or Local Demo
       const isDemo = isDemoActive();
       const currentUser = isDemo ? { uid: "local-demo-user" } : auth.currentUser;
