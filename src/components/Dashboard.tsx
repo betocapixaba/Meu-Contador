@@ -29,6 +29,7 @@ interface DashboardProps {
   onSelectTab: (tab: string) => void;
   goals: any[];
   onRefresh?: () => void;
+  onDeleteTransaction?: (id: string) => void;
   currency?: Currency;
 }
 
@@ -40,6 +41,7 @@ export default function Dashboard({
   onSelectTab,
   goals,
   onRefresh,
+  onDeleteTransaction,
   currency
 }: DashboardProps) {
   const [hideBalance, setHideBalance] = useState(false);
@@ -393,17 +395,24 @@ export default function Dashboard({
               <button
                 id="confirm-delete-modal-btn"
                 onClick={async () => {
-                  try {
-                    if (isDemoActive()) {
-                      await localDeleteDoc("transactions", transactionToDelete);
-                    } else {
-                      await deleteDoc(doc(db, "transactions", transactionToDelete));
+                  if (!transactionToDelete) return;
+                  const id = transactionToDelete;
+                  setTransactionToDelete(null);
+                  if (onDeleteTransaction) {
+                    await onDeleteTransaction(id);
+                  } else {
+                    try {
+                      if (isDemoActive()) {
+                        await localDeleteDoc("transactions", id);
+                      } else {
+                        await deleteDoc(doc(db, "transactions", id));
+                      }
+                    } catch (err) {
+                      console.warn("Delete error, trying fallback local delete:", err);
+                      await localDeleteDoc("transactions", id);
+                    } finally {
+                      if (onRefresh) onRefresh();
                     }
-                    if (onRefresh) onRefresh();
-                  } catch (err) {
-                    console.error("Failed to delete transaction:", err);
-                  } finally {
-                    setTransactionToDelete(null);
                   }
                 }}
                 className="flex-1 py-2.5 text-[11px] font-bold rounded-xl bg-rose-600 hover:bg-rose-700 text-white transition active:scale-95"

@@ -1,5 +1,7 @@
+import { auth } from "../firebase";
+
 export const isDemoActive = (): boolean => {
-  return localStorage.getItem("contador_ia_demo_mode") === "true";
+  return localStorage.getItem("contador_ia_demo_mode") === "true" || auth.currentUser?.uid === "local-demo-user";
 };
 
 // Helper to generate a unique random ID

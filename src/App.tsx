@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { onAuthStateChanged, User } from "firebase/auth";
-import { collection, query, where, getDocs, orderBy, onSnapshot } from "firebase/firestore";
+import { collection, query, where, getDocs, orderBy, onSnapshot, deleteDoc, doc } from "firebase/firestore";
 import { auth, db } from "./firebase";
+import { isDemoActive, localDeleteDoc, seedInitialDemoData } from "./utils/demoDb";
 import { 
   Home, 
   ArrowUpRight, 
@@ -23,7 +24,6 @@ import VoiceAssistant from "./components/VoiceAssistant";
 import ReceiptScanner from "./components/ReceiptScanner";
 import { Transaction, Goal, RecurrentExpense } from "./types";
 import { checkSmartAlerts } from "./notifications";
-import { seedInitialDemoData } from "./utils/demoDb";
 import { Currency } from "./utils/currency";
 
 export default function App() {
@@ -250,6 +250,29 @@ export default function App() {
       console.error("Error loading Firestore collections:", err);
     } finally {
       setDataLoading(false);
+    }
+  };
+
+  // Delete transaction handler with optimistic UI update
+  const handleDeleteTransaction = async (id: string) => {
+    // 1. Optimistically remove from state so it vanishes immediately from UI
+    setTransactions(prev => prev.filter(t => t.id !== id));
+
+    try {
+      if (isDemoActive()) {
+        await localDeleteDoc("transactions", id);
+      } else {
+        await deleteDoc(doc(db, "transactions", id));
+      }
+    } catch (err) {
+      console.warn("Primary delete failed, trying fallback local delete:", err);
+      try {
+        await localDeleteDoc("transactions", id);
+      } catch (fallbackErr) {
+        console.error("Local delete fallback error:", fallbackErr);
+      }
+    } finally {
+      fetchData();
     }
   };
 
@@ -531,6 +554,7 @@ export default function App() {
               onSelectTab={setActiveTab}
               goals={goals}
               onRefresh={fetchData}
+              onDeleteTransaction={handleDeleteTransaction}
               currency={currency}
             />
           )}
@@ -541,6 +565,7 @@ export default function App() {
               transactions={transactions} 
               initialType="receita"
               onRefresh={fetchData}
+              onDeleteTransaction={handleDeleteTransaction}
               currency={currency}
             />
           )}
@@ -551,6 +576,7 @@ export default function App() {
               transactions={transactions} 
               initialType="despesa"
               onRefresh={fetchData}
+              onDeleteTransaction={handleDeleteTransaction}
               currency={currency}
             />
           )}
@@ -560,6 +586,8 @@ export default function App() {
               darkMode={darkMode} 
               transactions={transactions} 
               currency={currency}
+              onRefresh={fetchData}
+              onDeleteTransaction={handleDeleteTransaction}
             />
           )}
 

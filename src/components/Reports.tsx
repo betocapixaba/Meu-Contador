@@ -8,21 +8,28 @@ import {
   ArrowUpRight, 
   ArrowDownLeft, 
   DollarSign, 
-  Layers 
+  Layers,
+  Trash2
 } from "lucide-react";
+import { deleteDoc, doc } from "firebase/firestore";
+import { db } from "../firebase";
 import { Transaction } from "../types";
+import { isDemoActive, localDeleteDoc } from "../utils/demoDb";
 import { Currency, formatCurrency } from "../utils/currency";
 
 interface ReportsProps {
   darkMode: boolean;
   transactions: Transaction[];
   currency?: Currency;
+  onRefresh?: () => void;
+  onDeleteTransaction?: (id: string) => void;
 }
 
-export default function Reports({ darkMode, transactions, currency }: ReportsProps) {
+export default function Reports({ darkMode, transactions, currency, onRefresh, onDeleteTransaction }: ReportsProps) {
   const [reportMonth, setReportMonth] = useState<string>(
     new Date().toISOString().substring(0, 7) // Current month "YYYY-MM"
   );
+  const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
 
   // Extract month options
   const getMonths = () => {
@@ -190,6 +197,7 @@ export default function Reports({ darkMode, transactions, currency }: ReportsPro
                     <th className="py-2.5 font-bold uppercase text-[9px] tracking-wider">Descrição</th>
                     <th className="py-2.5 font-bold uppercase text-[9px] tracking-wider">Categoria</th>
                     <th className="py-2.5 font-bold uppercase text-[9px] tracking-wider text-right">Valor</th>
+                    <th className="py-2.5 font-bold uppercase text-[9px] tracking-wider text-right print:hidden">Ação</th>
                   </tr>
                 </thead>
                 <tbody className={`divide-y ${darkMode ? "divide-zinc-800/50" : "divide-gray-100"}`}>
@@ -207,6 +215,18 @@ export default function Reports({ darkMode, transactions, currency }: ReportsPro
                       }`}>
                         {t.type === "receita" ? "+" : "-"}{formatCurrency(t.amount, currency?.symbol)}
                       </td>
+                      <td className="py-3 text-right print:hidden">
+                        <button
+                          id={`reports-delete-btn-${t.id}`}
+                          onClick={() => setTransactionToDelete(t.id)}
+                          className={`p-1.5 rounded-xl transition-all duration-150 text-rose-500 hover:text-rose-600 active:scale-90 inline-flex items-center justify-center ${
+                            darkMode ? "bg-rose-500/5 hover:bg-rose-500/15" : "bg-rose-50 hover:bg-rose-100"
+                          }`}
+                          title="Remover lançamento"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -215,6 +235,61 @@ export default function Reports({ darkMode, transactions, currency }: ReportsPro
           )}
         </div>
       </div>
+
+      {/* CONFIRMATION DIALOG FOR TRANSACTION DELETION IN REPORTS */}
+      {transactionToDelete && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-6 print:hidden">
+          <div className={`w-full max-w-xs p-5 rounded-3xl border shadow-2xl animate-slideUp ${
+            darkMode ? "bg-slate-900 border-slate-800 text-white" : "bg-white border-slate-100 text-slate-900"
+          }`}>
+            <h3 className="font-extrabold text-sm mb-2 text-rose-500">Excluir Lançamento?</h3>
+            <p className={`text-xs mb-5 leading-relaxed ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
+              Tem certeza que deseja remover este lançamento? Esta ação não pode ser desfeita.
+            </p>
+            <div className="flex gap-2">
+              <button
+                id="cancel-reports-delete-modal-btn"
+                onClick={() => setTransactionToDelete(null)}
+                className={`flex-1 py-2.5 text-[11px] font-bold rounded-xl border transition ${
+                  darkMode 
+                    ? "bg-slate-800 border-slate-700 hover:bg-slate-750 text-slate-300" 
+                    : "bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700"
+                }`}
+              >
+                Cancelar
+              </button>
+              <button
+                id="confirm-reports-delete-modal-btn"
+                onClick={async () => {
+                  if (!transactionToDelete) return;
+                  const id = transactionToDelete;
+                  setTransactionToDelete(null);
+                  if (onDeleteTransaction) {
+                    await onDeleteTransaction(id);
+                  } else {
+                    try {
+                      if (isDemoActive()) {
+                        await localDeleteDoc("transactions", id);
+                      } else {
+                        await deleteDoc(doc(db, "transactions", id));
+                      }
+                    } catch (err) {
+                      console.warn("Delete error, trying fallback local delete:", err);
+                      await localDeleteDoc("transactions", id);
+                    } finally {
+                      if (onRefresh) onRefresh();
+                    }
+                  }
+                }}
+                className="flex-1 py-2.5 text-[11px] font-bold rounded-xl bg-rose-600 hover:bg-rose-700 text-white transition active:scale-95"
+              >
+                Excluir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
