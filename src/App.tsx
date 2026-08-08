@@ -15,7 +15,10 @@ import {
   X,
   LogOut,
   Building,
-  Bot
+  Bot,
+  Maximize,
+  Minimize,
+  Smartphone
 } from "lucide-react";
 import Auth from "./components/Auth";
 import Dashboard from "./components/Dashboard";
@@ -53,6 +56,42 @@ export default function App() {
   const handleCurrencyChange = (newCurrency: Currency) => {
     setCurrency(newCurrency);
     localStorage.setItem("contador_ia_currency", JSON.stringify(newCurrency));
+  };
+
+  // Full Screen Mode for Mobile Devices
+  const [isFullScreen, setIsFullScreen] = useState(false);
+
+  useEffect(() => {
+    const handleFsChange = () => {
+      setIsFullScreen(!!(document.fullscreenElement || (document as any).webkitFullscreenElement));
+    };
+    document.addEventListener("fullscreenchange", handleFsChange);
+    document.addEventListener("webkitfullscreenchange", handleFsChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFsChange);
+      document.removeEventListener("webkitfullscreenchange", handleFsChange);
+    };
+  }, []);
+
+  const toggleFullScreen = () => {
+    if (!document.fullscreenElement && !(document as any).webkitFullscreenElement) {
+      const docEl = document.documentElement as any;
+      if (docEl.requestFullscreen) {
+        docEl.requestFullscreen().catch((err: any) => console.warn("Fullscreen request error:", err));
+      } else if (docEl.webkitRequestFullscreen) {
+        docEl.webkitRequestFullscreen();
+      } else if (docEl.msRequestFullscreen) {
+        docEl.msRequestFullscreen();
+      }
+      setIsFullScreen(true);
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch((err: any) => console.warn(err));
+      } else if ((document as any).webkitExitFullscreen) {
+        (document as any).webkitExitFullscreen();
+      }
+      setIsFullScreen(false);
+    }
   };
 
   // Helper to resolve the logged in user's full/display name for the app header
@@ -492,31 +531,39 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen w-full bg-[#0F172A] flex items-center justify-center font-sans select-none p-0 md:p-6 lg:p-8 overflow-x-hidden">
+    <div className={`min-h-screen h-[100dvh] w-full bg-[#0F172A] flex items-center justify-center font-sans select-none overflow-x-hidden ${
+      isFullScreen ? "p-0" : "p-0 md:p-6 lg:p-8"
+    }`}>
       
       {/* Mobile Simulator Frame */}
-      <div className={`w-full h-screen md:h-[780px] md:max-w-[385px] md:rounded-[3rem] md:shadow-2xl relative flex flex-col md:border-[12px] md:border-[#1E293B] overflow-hidden transition-all duration-200 ${
+      <div className={`w-full h-full min-h-[100dvh] ${
+        isFullScreen 
+          ? "w-full h-full max-w-none rounded-none border-0 shadow-none" 
+          : "md:h-[780px] md:max-w-[385px] md:rounded-[3rem] md:border-[12px] md:border-[#1E293B] md:shadow-2xl"
+      } relative flex flex-col overflow-hidden transition-all duration-200 ${
         darkMode ? "bg-[#0F172A] text-slate-100" : "bg-[#F8FAFC] text-slate-900"
       }`}>
         
         {/* Status Bar Area (Visible on simulator/desktop screens) */}
-        <div className={`hidden md:flex h-10 justify-between items-center px-8 pt-4 shrink-0 select-none ${
-          darkMode ? "text-slate-400" : "text-slate-500"
-        }`}>
-          <span className="text-xs font-bold font-sans">{currentTime || "9:41"}</span>
-          <div className="flex gap-1.5 items-center">
-            <div className="flex gap-0.5 items-end h-3">
-              <div className={`w-1 h-1 rounded-sm ${darkMode ? "bg-slate-400" : "bg-slate-700"}`}></div>
-              <div className={`w-1 h-1.5 rounded-sm ${darkMode ? "bg-slate-400" : "bg-slate-700"}`}></div>
-              <div className={`w-1 h-2 rounded-sm ${darkMode ? "bg-slate-400" : "bg-slate-700"}`}></div>
-              <div className={`w-1 h-2.5 rounded-sm ${darkMode ? "bg-slate-400" : "bg-slate-700"}`}></div>
-            </div>
-            <span className="text-[10px] font-bold">5G</span>
-            <div className={`w-5 h-2.5 rounded-sm border ${darkMode ? "border-slate-500" : "border-slate-700"} p-0.5 flex items-center`}>
-              <div className={`h-full w-4/5 rounded-2xs ${darkMode ? "bg-slate-400" : "bg-slate-800"}`}></div>
+        {!isFullScreen && (
+          <div className={`hidden md:flex h-10 justify-between items-center px-8 pt-4 shrink-0 select-none ${
+            darkMode ? "text-slate-400" : "text-slate-500"
+          }`}>
+            <span className="text-xs font-bold font-sans">{currentTime || "9:41"}</span>
+            <div className="flex gap-1.5 items-center">
+              <div className="flex gap-0.5 items-end h-3">
+                <div className={`w-1 h-1 rounded-sm ${darkMode ? "bg-slate-400" : "bg-slate-700"}`}></div>
+                <div className={`w-1 h-1.5 rounded-sm ${darkMode ? "bg-slate-400" : "bg-slate-700"}`}></div>
+                <div className={`w-1 h-2 rounded-sm ${darkMode ? "bg-slate-400" : "bg-slate-700"}`}></div>
+                <div className={`w-1 h-2.5 rounded-sm ${darkMode ? "bg-slate-400" : "bg-slate-700"}`}></div>
+              </div>
+              <span className="text-[10px] font-bold">5G</span>
+              <div className={`w-5 h-2.5 rounded-sm border ${darkMode ? "border-slate-500" : "border-slate-700"} p-0.5 flex items-center`}>
+                <div className={`h-full w-4/5 rounded-2xs ${darkMode ? "bg-slate-400" : "bg-slate-800"}`}></div>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Upper Header / Greeting */}
         <header className={`px-4 py-3 md:px-6 md:py-4 border-b flex justify-between items-center z-10 shrink-0 ${
@@ -543,6 +590,24 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
+            <button
+              id="header-fullscreen-btn"
+              onClick={toggleFullScreen}
+              title={isFullScreen ? "Sair da Tela Cheia" : "Tela Cheia no Celular"}
+              className={`p-1.5 md:p-2 rounded-xl border transition-all duration-200 active:scale-90 shrink-0 flex items-center gap-1 ${
+                isFullScreen 
+                  ? "bg-purple-600 border-purple-500 text-white shadow-md shadow-purple-500/20" 
+                  : darkMode 
+                    ? "bg-purple-500/10 border-purple-500/20 text-purple-400 hover:text-purple-300 hover:bg-purple-500/20" 
+                    : "bg-purple-50 border-purple-100 text-purple-700 hover:bg-purple-100 shadow-xs"
+              }`}
+            >
+              {isFullScreen ? <Minimize className="w-3.5 h-3.5 md:w-4 md:h-4" /> : <Maximize className="w-3.5 h-3.5 md:w-4 md:h-4" />}
+              <span className="text-[10px] font-extrabold hidden sm:inline">
+                {isFullScreen ? "Sair Tela Cheia" : "Tela Cheia"}
+              </span>
+            </button>
+
             <button
               id="header-ai-agent-btn"
               onClick={() => setActiveTab("AgenteIA")}

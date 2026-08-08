@@ -19,7 +19,9 @@ import {
   Lock,
   Key,
   Settings,
-  RefreshCw
+  RefreshCw,
+  Smartphone,
+  Maximize
 } from "lucide-react";
 import { 
   collection, 
@@ -576,6 +578,39 @@ export default function Profile({
           }`}>
             <h4 className="font-extrabold text-xs uppercase tracking-wider opacity-60 px-1">Configurações Gerais</h4>
             
+            <div className="flex items-center justify-between px-1">
+              <div className="flex items-center gap-2">
+                <Smartphone className="w-4 h-4 text-purple-500" />
+                <div className="flex flex-col">
+                  <span className="text-xs font-semibold">Modo Tela Cheia (Celular)</span>
+                  <span className="text-[9px] opacity-60">Expandir app em 100% no celular</span>
+                </div>
+              </div>
+              <button
+                id="toggle-fullscreen-profile-btn"
+                onClick={() => {
+                  if (!document.fullscreenElement && !(document as any).webkitFullscreenElement) {
+                    const docEl = document.documentElement as any;
+                    if (docEl.requestFullscreen) docEl.requestFullscreen().catch((err: any) => console.warn(err));
+                    else if (docEl.webkitRequestFullscreen) docEl.webkitRequestFullscreen();
+                  } else {
+                    if (document.exitFullscreen) document.exitFullscreen().catch((err: any) => console.warn(err));
+                    else if ((document as any).webkitExitFullscreen) (document as any).webkitExitFullscreen();
+                  }
+                }}
+                className={`text-[11px] font-extrabold px-3 py-1.5 rounded-xl border transition flex items-center gap-1.5 ${
+                  darkMode
+                    ? "bg-purple-600/20 border-purple-500/30 text-purple-400 hover:bg-purple-600/30"
+                    : "bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100 shadow-sm"
+                }`}
+              >
+                <Maximize className="w-3.5 h-3.5" />
+                <span>Ativar Tela Cheia</span>
+              </button>
+            </div>
+
+            <hr className={darkMode ? "border-zinc-800" : "border-gray-100"} />
+
             <div className="flex items-center justify-between px-1">
               <div className="flex items-center gap-2">
                 {darkMode ? <Moon className="w-4 h-4 text-purple-500" /> : <Sun className="w-4 h-4 text-amber-500" />}
