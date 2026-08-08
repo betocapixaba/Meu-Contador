@@ -21,7 +21,13 @@ import {
   Settings,
   RefreshCw,
   Smartphone,
-  Maximize
+  Maximize,
+  Fingerprint,
+  Copy,
+  Check,
+  ShieldCheck,
+  IdCard,
+  UserCheck
 } from "lucide-react";
 import { 
   collection, 
@@ -161,6 +167,10 @@ export default function Profile({
   const [accEmail, setAccEmail] = useState("");
   const [accPassword, setAccPassword] = useState("");
   const [accConfirmPassword, setAccConfirmPassword] = useState("");
+  const [accUserId, setAccUserId] = useState(() => {
+    return localStorage.getItem("contador_ia_custom_user_id") || (isDemo ? "USR-DEMO-99128" : auth.currentUser?.uid || "USR-DEFAULT");
+  });
+  const [copiedUserId, setCopiedUserId] = useState(false);
   const [accSuccessMsg, setAccSuccessMsg] = useState<string | null>(null);
   const [accErrorMsg, setAccErrorMsg] = useState<string | null>(null);
   const [accLoading, setAccLoading] = useState(false);
@@ -171,6 +181,50 @@ export default function Profile({
       setAccEmail(user.email || "");
     }
   }, [user.displayName, user.email]);
+
+  const handleCopyUserId = () => {
+    const idToCopy = accUserId.trim() || user.uid;
+    navigator.clipboard.writeText(idToCopy);
+    setCopiedUserId(true);
+    setTimeout(() => setCopiedUserId(false), 2000);
+  };
+
+  const handleUpdateUserId = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAccSuccessMsg(null);
+    setAccErrorMsg(null);
+    const cleanedId = accUserId.trim();
+    if (!cleanedId) {
+      setAccErrorMsg("O ID de Usuário não pode estar vazio.");
+      return;
+    }
+    if (cleanedId.length < 3) {
+      setAccErrorMsg("O ID de Usuário deve conter pelo menos 3 caracteres.");
+      return;
+    }
+
+    setAccLoading(true);
+    try {
+      localStorage.setItem("contador_ia_custom_user_id", cleanedId);
+      if (!isDemo && auth.currentUser) {
+        try {
+          await updateDoc(doc(db, "users", auth.currentUser.uid), {
+            customUserId: cleanedId,
+            updatedAt: new Date().toISOString()
+          });
+        } catch (err) {
+          // If doc doesn't exist, ignore or create
+          console.log("Updated local user ID state");
+        }
+      }
+      setAccSuccessMsg(`ID de Usuário / Identificador atualizado para "${cleanedId}" com sucesso!`);
+    } catch (err: any) {
+      console.warn("Error updating user ID:", err);
+      setAccErrorMsg(err.message || "Erro ao atualizar ID de usuário.");
+    } finally {
+      setAccLoading(false);
+    }
+  };
 
   const handleUpdateAccountName = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -653,19 +707,23 @@ export default function Profile({
 
             <div className="flex items-center justify-between px-1">
               <div className="flex items-center gap-2">
-                <Settings className="w-4 h-4 text-purple-500" />
-                <span className="text-xs font-semibold">Configurações da Conta</span>
+                <ShieldCheck className="w-4 h-4 text-purple-500" />
+                <div className="flex flex-col">
+                  <span className="text-xs font-semibold">Painel de Registro & Credenciais</span>
+                  <span className="text-[9px] opacity-60">Alterar Usuário, Senha e ID</span>
+                </div>
               </div>
               <button
                 id="open-account-settings-btn"
                 onClick={() => setActiveSubSection("conta")}
-                className={`text-[11px] font-extrabold px-3 py-1.5 rounded-xl border transition ${
+                className={`text-[11px] font-extrabold px-3 py-1.5 rounded-xl border transition flex items-center gap-1 ${
                   darkMode
-                    ? "bg-zinc-850 border-zinc-700 hover:bg-zinc-800 text-purple-400"
-                    : "bg-slate-50 border-slate-200 hover:bg-slate-100 text-purple-700 shadow-sm"
+                    ? "bg-purple-600/20 border-purple-500/30 text-purple-400 hover:bg-purple-600/30"
+                    : "bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100 shadow-sm"
                 }`}
               >
-                Gerenciar Conta
+                <Key className="w-3.5 h-3.5" />
+                <span>Usuário, Senha e ID</span>
               </button>
             </div>
 
@@ -990,9 +1048,9 @@ export default function Profile({
           </div>
 
           <div>
-            <h3 className="text-sm font-extrabold flex items-center gap-2"><Settings className="w-4.5 h-4.5 text-purple-500" /> Configurações de Conta</h3>
+            <h3 className="text-sm font-extrabold flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-purple-500" /> Painel de Registro de Credenciais</h3>
             <p className={`text-[11px] leading-relaxed mt-1 ${darkMode ? "text-zinc-500" : "text-gray-400"}`}>
-              Gerencie seus dados pessoais, e-mail, senha de segurança e a moeda corrente padrão do sistema.
+              Painel completo para gestão e mudança de Nome de Usuário, Senha de Acesso e ID de Identificador do sistema.
             </p>
           </div>
 
@@ -1010,6 +1068,61 @@ export default function Profile({
               <span className="font-semibold">{accErrorMsg}</span>
             </div>
           )}
+
+          {/* 1. MUDANÇA E CÓPIA DE ID DE USUÁRIO */}
+          <div className={`p-4 rounded-3xl border space-y-3.5 ${
+            darkMode ? "bg-zinc-900 border-zinc-800" : "bg-white border-gray-100 shadow-sm"
+          }`}>
+            <div className="flex items-center justify-between">
+              <h4 className="font-extrabold text-xs uppercase tracking-wider opacity-60 flex items-center gap-1.5 text-purple-400">
+                <Fingerprint className="w-4 h-4 text-purple-500" /> ID de Usuário / Identificador
+              </h4>
+              <button
+                id="copy-user-id-btn"
+                onClick={handleCopyUserId}
+                className={`text-[10px] font-extrabold px-2.5 py-1 rounded-lg border transition flex items-center gap-1 ${
+                  copiedUserId 
+                    ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" 
+                    : darkMode 
+                      ? "bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-750" 
+                      : "bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200"
+                }`}
+              >
+                {copiedUserId ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                <span>{copiedUserId ? "Copiado!" : "Copiar ID"}</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateUserId} className="space-y-3">
+              <div className="relative">
+                <span className={`absolute left-3.5 top-1/2 -translate-y-1/2 text-xs ${darkMode ? "text-slate-500" : "text-slate-400"}`}>
+                  <IdCard className="w-4 h-4 text-purple-500" />
+                </span>
+                <input
+                  id="account-user-id-input"
+                  type="text"
+                  required
+                  placeholder="Seu ID de Usuário (ex: USR-99128)"
+                  value={accUserId}
+                  onChange={(e) => setAccUserId(e.target.value)}
+                  className={`w-full pl-10 pr-4 py-3 text-xs font-mono font-bold rounded-xl border focus:outline-none focus:ring-2 focus:ring-purple-500 transition ${
+                    darkMode 
+                      ? "bg-zinc-850 border-zinc-700 text-purple-300 focus:border-purple-500" 
+                      : "bg-slate-50 border-slate-200 text-purple-900 focus:border-purple-500"
+                  }`}
+                />
+              </div>
+              <button
+                id="submit-update-user-id-btn"
+                type="submit"
+                disabled={accLoading}
+                className="w-full bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold py-2.5 rounded-xl transition disabled:opacity-50 flex items-center justify-center gap-1.5"
+              >
+                <Fingerprint className="w-3.5 h-3.5" />
+                {accLoading ? "Atualizando..." : "Salvar Novo ID de Usuário"}
+              </button>
+            </form>
+          </div>
 
           {/* 1. MUDANÇA DE MOEDA / MOEDA CORRENTE */}
           <div className={`p-4 rounded-3xl border space-y-3.5 ${
