@@ -72,17 +72,92 @@ export default function VoiceAssistant({ darkMode, onTransactionAdded, onClose }
     }
   }, []);
 
-  const startListening = () => {
-    if (recognitionRef.current) {
-      setError(null);
-      setSuccessData(null);
-      try {
-        recognitionRef.current.start();
-      } catch (e) {
-        recognitionRef.current.stop();
+  const startListening = async () => {
+    setError(null);
+    setSuccessData(null);
+    setTranscript("");
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      setError("Reconhecimento de voz não suportado neste navegador. Use o Google Chrome no celular ou digite o comando abaixo.");
+      return;
+    }
+
+    // Explicitly request user media to trigger native Chrome microphone permission popup on Android/iOS
+    try {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach(track => track.stop());
       }
-    } else {
-      setError("Microfone não inicializado. Por favor, digite o comando abaixo.");
+    } catch (err: any) {
+      console.warn("getUserMedia permission warning:", err);
+      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+        setError("Acesso ao microfone negado no Chrome. Toque no ícone de configurações na barra de endereço do seu navegador para permitir o microfone.");
+        return;
+      }
+    }
+
+    try {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.abort(); } catch (e) {}
+      }
+
+      const recognition = new SpeechRecognition();
+      recognition.lang = "pt-BR";
+      recognition.continuous = false;
+      recognition.interimResults = true;
+
+      let capturedText = "";
+
+      recognition.onstart = () => {
+        setIsListening(true);
+        setError(null);
+        setTranscript("Ouvindo... Fale sua receita ou despesa...");
+      };
+
+      recognition.onresult = (event: any) => {
+        let interim = "";
+        let final = "";
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            final += event.results[i][0].transcript;
+          } else {
+            interim += event.results[i][0].transcript;
+          }
+        }
+        capturedText = final || interim;
+        if (capturedText) {
+          setTranscript(capturedText);
+          setManualInput(capturedText);
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        console.error("Speech recognition error:", event.error);
+        setIsListening(false);
+        if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+          setError("Permissão de microfone negada. Toque no ícone de cadeado/configurações na barra do Chrome para permitir o 'Microfone'.");
+        } else if (event.error === "no-speech") {
+          setTranscript("Nenhuma fala detectada. Tente falar novamente.");
+        } else if (event.error !== "aborted") {
+          setError(`Erro de áudio (${event.error}). Tente falar mais perto do celular ou digite abaixo.`);
+        }
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+        if (capturedText.trim()) {
+          processCommand(capturedText.trim());
+        }
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (e: any) {
+      console.error("Failed to start SpeechRecognition:", e);
+      setIsListening(false);
+      setError("Erro ao iniciar microfone. Verifique as permissões do seu navegador.");
     }
   };
 

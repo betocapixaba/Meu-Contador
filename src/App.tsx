@@ -18,7 +18,9 @@ import {
   Bot,
   Maximize,
   Minimize,
-  Smartphone
+  Smartphone,
+  Sun,
+  Moon
 } from "lucide-react";
 import Auth from "./components/Auth";
 import Dashboard from "./components/Dashboard";
@@ -613,6 +615,20 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
+            {/* Dark / Light Mode Switch */}
+            <button
+              id="header-theme-toggle-btn"
+              onClick={toggleDarkMode}
+              title={darkMode ? "Mudar para Modo Claro" : "Mudar para Modo Escuro"}
+              className={`p-1.5 md:p-2 rounded-xl border transition-all duration-200 active:scale-90 shrink-0 flex items-center justify-center ${
+                darkMode 
+                  ? "bg-slate-800 border-slate-700 text-amber-400 hover:text-amber-300 hover:bg-slate-700" 
+                  : "bg-amber-50 border-amber-200 text-amber-600 hover:bg-amber-100 shadow-xs"
+              }`}
+            >
+              {darkMode ? <Sun className="w-3.5 h-3.5 md:w-4 md:h-4" /> : <Moon className="w-3.5 h-3.5 md:w-4 md:h-4 text-indigo-700" />}
+            </button>
+
             <button
               id="header-fullscreen-btn"
               onClick={toggleFullScreen}

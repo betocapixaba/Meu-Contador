@@ -19,7 +19,10 @@ import {
   DollarSign, 
   HelpCircle,
   Clock,
-  History
+  History,
+  ExternalLink,
+  X,
+  Smartphone
 } from "lucide-react";
 import { collection, addDoc } from "firebase/firestore";
 import { db, auth } from "../firebase";
@@ -57,6 +60,8 @@ export default function AiAgent({ darkMode, onTransactionAdded, currency, transa
   const [inputText, setInputText] = useState("");
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState("");
+  const [micError, setMicError] = useState<string | null>(null);
+  const [isIframe, setIsIframe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState<AgentMessage[]>([
     {
@@ -71,56 +76,112 @@ export default function AiAgent({ darkMode, onTransactionAdded, currency, transa
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
 
+  // Detect iframe context
+  useEffect(() => {
+    try {
+      setIsIframe(window.self !== window.top);
+    } catch (e) {
+      setIsIframe(true);
+    }
+  }, []);
+
   // Scroll to bottom when messages update
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
-  // Web Speech API setup
-  useEffect(() => {
+  const toggleListening = async () => {
+    if (isListening) {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch (e) {}
+      }
+      setIsListening(false);
+      return;
+    }
+
+    setMicError(null);
+    setTranscript("");
+
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (SpeechRecognition) {
+
+    if (!SpeechRecognition) {
+      setMicError("Reconhecimento de voz não suportado neste navegador. Use o Google Chrome no celular ou digite a mensagem.");
+      return;
+    }
+
+    // Explicitly request user media to trigger native Chrome microphone permission popup on Android/iOS
+    try {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach(track => track.stop());
+      }
+    } catch (err: any) {
+      console.warn("getUserMedia permission warning:", err);
+      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+        setMicError("Acesso ao microfone negado no Chrome. Toque no ícone de configurações ao lado do endereço web do Chrome para permitir o microfone.");
+        return;
+      }
+    }
+
+    try {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.abort(); } catch (e) {}
+      }
+
       const recognition = new SpeechRecognition();
       recognition.lang = "pt-BR";
       recognition.continuous = false;
-      recognition.interimResults = false;
+      recognition.interimResults = true;
+
+      let capturedText = "";
 
       recognition.onstart = () => {
         setIsListening(true);
-        setTranscript("Ouvindo... Fale sua entrada ou saída...");
+        setTranscript("Ouvindo... Fale sua frase...");
       };
 
       recognition.onresult = (event: any) => {
-        const text = event.results[0][0].transcript;
-        setTranscript(text);
-        setInputText(text);
-        handleProcessCommand(text);
+        let interim = "";
+        let final = "";
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            final += event.results[i][0].transcript;
+          } else {
+            interim += event.results[i][0].transcript;
+          }
+        }
+        capturedText = final || interim;
+        if (capturedText) {
+          setTranscript(capturedText);
+          setInputText(capturedText);
+        }
       };
 
       recognition.onerror = (event: any) => {
-        console.warn("Speech error:", event.error);
+        console.warn("Speech recognition error:", event.error);
         setIsListening(false);
+        if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+          setMicError("Permissão de microfone negada ou bloqueada. Toque na barra de endereço do Chrome para permitir 'Microfone'.");
+        } else if (event.error === "no-speech") {
+          setTranscript("Nenhuma fala detectada. Tente novamente.");
+        } else if (event.error !== "aborted") {
+          setMicError(`Erro no microfone (${event.error}). Tente falar mais perto do celular ou digite a mensagem.`);
+        }
       };
 
       recognition.onend = () => {
         setIsListening(false);
+        if (capturedText.trim()) {
+          handleProcessCommand(capturedText.trim());
+        }
       };
 
       recognitionRef.current = recognition;
-    }
-  }, []);
-
-  const toggleListening = () => {
-    if (isListening) {
-      recognitionRef.current?.stop();
+      recognition.start();
+    } catch (e: any) {
+      console.error("Failed to start SpeechRecognition:", e);
       setIsListening(false);
-    } else {
-      setTranscript("");
-      try {
-        recognitionRef.current?.start();
-      } catch (e) {
-        recognitionRef.current?.stop();
-      }
+      setMicError("Erro ao iniciar microfone. Verifique as permissões do seu navegador.");
     }
   };
 
@@ -530,6 +591,36 @@ export default function AiAgent({ darkMode, onTransactionAdded, currency, transa
 
         {/* Input Control Box */}
         <div className="pt-3 border-t border-slate-200/20">
+          {micError && (
+            <div className={`p-3 mb-2.5 rounded-2xl border text-xs flex items-start justify-between gap-2 ${
+              darkMode ? "bg-amber-500/10 border-amber-500/30 text-amber-300" : "bg-amber-50 border-amber-200 text-amber-900"
+            }`}>
+              <div className="flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-[11px] leading-snug">{micError}</p>
+                  {isIframe && (
+                    <a
+                      href={window.location.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 mt-1 text-[11px] font-bold text-purple-500 hover:underline"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      <span>Abrir em Nova Aba (Permite o microfone)</span>
+                    </a>
+                  )}
+                </div>
+              </div>
+              <button 
+                onClick={() => setMicError(null)} 
+                className="p-1 text-slate-400 hover:text-slate-600 transition"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           {transcript && isListening && (
             <div className={`p-2.5 rounded-xl text-xs italic mb-2 border ${
               darkMode ? "bg-slate-950 border-slate-800 text-purple-300" : "bg-purple-50 border-purple-200 text-purple-800"
