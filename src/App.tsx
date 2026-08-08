@@ -59,7 +59,7 @@ export default function App() {
   };
 
   // Full Screen Mode for Mobile Devices
-  const [isFullScreen, setIsFullScreen] = useState(false);
+  const [isFullScreen, setIsFullScreen] = useState(true);
 
   useEffect(() => {
     const handleFsChange = () => {
@@ -531,16 +531,12 @@ export default function App() {
   }
 
   return (
-    <div className={`min-h-screen h-[100dvh] w-full bg-[#0F172A] flex items-center justify-center font-sans select-none overflow-x-hidden ${
-      isFullScreen ? "p-0" : "p-0 md:p-6 lg:p-8"
+    <div className={`min-h-screen h-[100dvh] w-full flex flex-col font-sans select-none overflow-x-hidden p-0 m-0 ${
+      darkMode ? "bg-[#0F172A] text-slate-100" : "bg-[#F8FAFC] text-slate-900"
     }`}>
       
-      {/* Mobile Simulator Frame */}
-      <div className={`w-full h-full min-h-[100dvh] ${
-        isFullScreen 
-          ? "w-full h-full max-w-none rounded-none border-0 shadow-none" 
-          : "md:h-[780px] md:max-w-[385px] md:rounded-[3rem] md:border-[12px] md:border-[#1E293B] md:shadow-2xl"
-      } relative flex flex-col overflow-hidden transition-all duration-200 ${
+      {/* App Main Fullscreen Container */}
+      <div className={`w-full h-full min-h-[100dvh] flex flex-col flex-1 relative overflow-hidden transition-all duration-200 ${
         darkMode ? "bg-[#0F172A] text-slate-100" : "bg-[#F8FAFC] text-slate-900"
       }`}>
         
