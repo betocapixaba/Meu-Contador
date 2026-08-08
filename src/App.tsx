@@ -625,22 +625,6 @@ export default function App() {
             </button>
 
             <button
-              id="header-client-config-btn"
-              onClick={() => setActiveTab("Clientes")}
-              title="Configuração do Usuário"
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 md:px-3 md:py-1.5 rounded-xl border transition-all duration-200 active:scale-90 text-xs font-extrabold shrink-0 ${
-                activeTab === "Clientes"
-                  ? "bg-purple-600 border-purple-500 text-white shadow-md shadow-purple-500/20"
-                  : darkMode 
-                    ? "bg-slate-850 border-slate-800 text-slate-300 hover:text-white" 
-                    : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100 shadow-xs"
-              }`}
-            >
-              <Building className="w-3.5 h-3.5" />
-              <span className="hidden xs:inline">Usuários</span>
-            </button>
-
-            <button
               id="header-scan-shortcut-btn"
               onClick={() => setShowScanModal(true)}
               className={`p-1.5 md:p-2 rounded-xl border transition-all duration-200 active:scale-90 shrink-0 ${
@@ -692,7 +676,6 @@ export default function App() {
             { id: "AgenteIA", label: "Agente IA", icon: Bot },
             { id: "Receitas", label: "Receitas", icon: ArrowUpRight },
             { id: "Despesas", label: "Despesas", icon: ArrowDownLeft },
-            { id: "Clientes", label: "Config do Usuário", icon: Building },
             { id: "Relatórios", label: "Relatórios", icon: FileText },
             { id: "Perfil", label: "Perfil", icon: UserIcon }
           ].map((tab) => {
@@ -760,15 +743,6 @@ export default function App() {
               initialType="despesa"
               onRefresh={fetchData}
               onDeleteTransaction={handleDeleteTransaction}
-              currency={currency}
-            />
-          )}
-
-          {activeTab === "Clientes" && (
-            <ClientConfig 
-              darkMode={darkMode}
-              transactions={transactions}
-              onRefresh={fetchData}
               currency={currency}
             />
           )}
