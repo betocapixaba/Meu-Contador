@@ -1,4 +1,4 @@
-const CACHE_NAME = "contador-ia-cache-v2";
+const CACHE_NAME = "contador-ia-cache-v3";
 const ASSETS_TO_CACHE = [
   "/",
   "/index.html",
@@ -6,6 +6,7 @@ const ASSETS_TO_CACHE = [
 ];
 
 self.addEventListener("install", (event) => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then(async (cache) => {
       try {
@@ -13,7 +14,7 @@ self.addEventListener("install", (event) => {
       } catch (err) {
         console.warn("Service worker asset caching failed gracefully:", err);
       }
-    }).then(() => self.skipWaiting())
+    })
   );
 });
 
@@ -41,27 +42,26 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // Network-first strategy for smooth updates on Vercel
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      return fetch(event.request)
-        .then((response) => {
-          if (!response || response.status !== 200 || response.type !== "basic") {
-            return response;
-          }
-          const responseToCache = response.clone();
+    fetch(event.request)
+      .then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200 && networkResponse.type === "basic") {
+          const responseToCache = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(event.request, responseToCache);
           }).catch(() => {});
-          return response;
-        })
-        .catch(() => {
-          // Return cached index or empty response instead of failing
-          return caches.match("/index.html") || caches.match("/");
+        }
+        return networkResponse;
+      })
+      .catch(() => {
+        return caches.match(event.request).then((cached) => {
+          if (cached) return cached;
+          if (event.request.headers.get("accept")?.includes("text/html")) {
+            return caches.match("/index.html") || caches.match("/");
+          }
         });
-    })
+      })
   );
 });
 

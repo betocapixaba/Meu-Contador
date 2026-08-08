@@ -184,7 +184,9 @@ export default function Profile({
 
   const handleCopyUserId = () => {
     const idToCopy = accUserId.trim() || user.uid;
-    navigator.clipboard.writeText(idToCopy);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(idToCopy).catch(() => {});
+    }
     setCopiedUserId(true);
     setTimeout(() => setCopiedUserId(false), 2000);
   };
