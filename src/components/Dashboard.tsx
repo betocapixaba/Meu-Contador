@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { 
   Eye, 
   EyeOff, 
@@ -45,6 +45,7 @@ export default function Dashboard({
   currency
 }: DashboardProps) {
   const [hideBalance, setHideBalance] = useState(false);
+  const [balanceScope, setBalanceScope] = useState<"month" | "all">("month");
   const [selectedMonth, setSelectedMonth] = useState<string>(
     new Date().toISOString().substring(0, 7) // e.g. "2026-07"
   );
@@ -69,16 +70,48 @@ export default function Dashboard({
   // Filtered transactions for the selected month
   const filteredTransactions = transactions.filter(t => t.date.startsWith(selectedMonth));
 
-  // Calculates financial balances
-  const totalIncome = filteredTransactions
+  // Calculates financial balances for selected month
+  const monthIncome = filteredTransactions
     .filter(t => t.type === "receita")
     .reduce((sum, t) => sum + t.amount, 0);
 
-  const totalExpense = filteredTransactions
+  const monthExpense = filteredTransactions
     .filter(t => t.type === "despesa")
     .reduce((sum, t) => sum + t.amount, 0);
 
+  // Calculates ALL-TIME accumulated balances
+  const totalAccumulatedIncome = transactions
+    .filter(t => t.type === "receita")
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const totalAccumulatedExpense = transactions
+    .filter(t => t.type === "despesa")
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  // Active values based on selected scope
+  const totalIncome = balanceScope === "month" ? monthIncome : totalAccumulatedIncome;
+  const totalExpense = balanceScope === "month" ? monthExpense : totalAccumulatedExpense;
   const currentBalance = totalIncome - totalExpense;
+
+  // Calculates running net available balance for every transaction chronologically
+  const runningBalancesMap = useMemo(() => {
+    const map = new Map<string, number>();
+    const sorted = [...transactions].sort((a, b) => {
+      const dateComp = (a.date || "").localeCompare(b.date || "");
+      if (dateComp !== 0) return dateComp;
+      return (a.createdAt || "").localeCompare(b.createdAt || "");
+    });
+    let runningNet = 0;
+    for (const t of sorted) {
+      if (t.type === "receita") {
+        runningNet += t.amount;
+      } else {
+        runningNet -= t.amount;
+      }
+      map.set(t.id, runningNet);
+    }
+    return map;
+  }, [transactions]);
 
   // Render Category Icon / Color helper
   const getCategoryColor = (category: string, type: string) => {
@@ -142,11 +175,38 @@ export default function Dashboard({
         <div className="absolute -right-4 -top-4 w-24 h-24 bg-white opacity-10 rounded-full"></div>
         <div className="absolute left-1/3 -bottom-6 w-16 h-16 bg-white opacity-5 rounded-full"></div>
 
-        <div className="flex justify-between items-start mb-4 relative z-10">
+        {/* Scope selector tabs inside card */}
+        <div className="flex items-center justify-between mb-3 relative z-10">
+          <div className="flex items-center bg-black/20 p-1 rounded-xl text-[11px] font-bold backdrop-blur-md">
+            <button
+              onClick={() => setBalanceScope("month")}
+              className={`px-3 py-1 rounded-lg transition ${
+                balanceScope === "month" ? "bg-white text-purple-950 shadow-xs" : "text-white/80 hover:text-white"
+              }`}
+            >
+              Saldo do Mês
+            </button>
+            <button
+              onClick={() => setBalanceScope("all")}
+              className={`px-3 py-1 rounded-lg transition ${
+                balanceScope === "all" ? "bg-white text-purple-950 shadow-xs" : "text-white/80 hover:text-white"
+              }`}
+            >
+              Saldo Geral Acumulado
+            </button>
+          </div>
+          <span className="text-[10px] bg-white/20 px-2.5 py-1 rounded-lg font-bold uppercase tracking-widest backdrop-blur-sm shrink-0">
+            {balanceScope === "month" ? "Filtro Mensal" : "Total Geral"}
+          </span>
+        </div>
+
+        <div className="flex justify-between items-start mb-2 relative z-10">
           <div>
-            <span className="text-xs opacity-80 mb-1 font-bold uppercase tracking-wider">Saldo Líquido Disponível</span>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-3xl font-extrabold tracking-tight font-sans">
+            <span className="text-xs opacity-80 mb-1 font-bold uppercase tracking-wider block">
+              Saldo Líquido Disponível
+            </span>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className={`text-3xl font-extrabold tracking-tight font-sans ${currentBalance < 0 ? "text-rose-200" : "text-white"}`}>
                 {hideBalance ? "••••••" : formatCurrency(currentBalance, currency?.symbol)}
               </span>
               <button
@@ -157,31 +217,23 @@ export default function Dashboard({
                 {hideBalance ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
               </button>
             </div>
-          </div>
-          <span className="text-[10px] bg-white/20 px-3 py-1.5 rounded-lg font-bold uppercase tracking-widest backdrop-blur-sm">
-            Conta Principal
-          </span>
-        </div>
-
-        {/* Quick totals in two elegant visual pills */}
-        <div className="grid grid-cols-2 gap-4 mt-6 pt-4 border-t border-white/10 relative z-10">
-          <div>
-            <div className="flex items-center gap-1.5 opacity-80 text-[10px] font-bold uppercase tracking-wide">
-              <div className="w-2.5 h-2.5 rounded-full bg-emerald-400"></div>
-              Receitas
-            </div>
-            <p className="text-sm font-extrabold tracking-tight mt-0.5 font-sans">
-              {hideBalance ? "••••••" : formatCurrency(totalIncome, currency?.symbol)}
-            </p>
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5 opacity-80 text-[10px] font-bold uppercase tracking-wide">
-              <div className="w-2.5 h-2.5 rounded-full bg-rose-450"></div>
-              Despesas
-            </div>
-            <p className="text-sm font-extrabold tracking-tight mt-0.5 font-sans">
-              {hideBalance ? "••••••" : formatCurrency(totalExpense, currency?.symbol)}
-            </p>
+            
+            {/* Explicit calculation formula display */}
+            {!hideBalance && (
+              <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-purple-100/90 font-medium">
+                <span className="bg-emerald-400/20 px-1.5 py-0.5 rounded text-emerald-200 font-bold">
+                  +{formatCurrency(totalIncome, currency?.symbol)}
+                </span>
+                <span>-</span>
+                <span className="bg-rose-500/20 px-1.5 py-0.5 rounded text-rose-200 font-bold">
+                  -{formatCurrency(totalExpense, currency?.symbol)}
+                </span>
+                <span>=</span>
+                <span className="font-bold underline text-white">
+                  {formatCurrency(currentBalance, currency?.symbol)}
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -339,7 +391,7 @@ export default function Dashboard({
                 </div>
 
                 <div className="flex items-center gap-3.5">
-                  <div className="text-right">
+                  <div className="text-right flex flex-col items-end">
                     <p className={`text-xs font-extrabold font-mono ${
                       t.type === "receita" ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
                     }`}>
@@ -348,6 +400,19 @@ export default function Dashboard({
                     <p className={`text-[8px] font-mono mt-0.5 ${darkMode ? "text-slate-500" : "text-slate-400"}`}>
                       {t.date}
                     </p>
+                    {runningBalancesMap.has(t.id) && (
+                      <span className={`text-[9px] font-bold mt-1 px-1.5 py-0.5 rounded-md font-mono inline-block ${
+                        (runningBalancesMap.get(t.id) ?? 0) >= 0
+                          ? darkMode 
+                            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" 
+                            : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                          : darkMode 
+                            ? "bg-rose-500/10 text-rose-400 border border-rose-500/20" 
+                            : "bg-rose-50 text-rose-700 border border-rose-200"
+                      }`}>
+                        Saldo Líq: {formatCurrency(runningBalancesMap.get(t.id)!, currency?.symbol)}
+                      </span>
+                    )}
                   </div>
 
                    <button

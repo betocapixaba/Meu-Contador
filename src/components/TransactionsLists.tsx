@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { 
   Plus, 
   Trash2, 
@@ -106,6 +106,26 @@ export default function TransactionsLists({
   };
 
 
+
+  // Calculates running net available balance for every transaction chronologically
+  const runningBalancesMap = useMemo(() => {
+    const map = new Map<string, number>();
+    const sorted = [...transactions].sort((a, b) => {
+      const dateComp = (a.date || "").localeCompare(b.date || "");
+      if (dateComp !== 0) return dateComp;
+      return (a.createdAt || "").localeCompare(b.createdAt || "");
+    });
+    let runningNet = 0;
+    for (const t of sorted) {
+      if (t.type === "receita") {
+        runningNet += t.amount;
+      } else {
+        runningNet -= t.amount;
+      }
+      map.set(t.id, runningNet);
+    }
+    return map;
+  }, [transactions]);
 
   // Filter list
   const filtered = transactions
@@ -291,7 +311,7 @@ export default function TransactionsLists({
               </div>
 
               <div className="flex items-center gap-3.5">
-                <div className="text-right">
+                <div className="text-right flex flex-col items-end">
                   <p className={`text-xs font-extrabold font-mono ${
                     t.type === "receita" ? "text-emerald-500" : darkMode ? "text-zinc-300" : "text-gray-900"
                   }`}>
@@ -300,6 +320,19 @@ export default function TransactionsLists({
                   <p className={`text-[8px] font-mono mt-0.5 ${darkMode ? "text-zinc-600" : "text-gray-400"}`}>
                     {t.date}
                   </p>
+                  {runningBalancesMap.has(t.id) && (
+                    <span className={`text-[9px] font-bold mt-1 px-1.5 py-0.5 rounded-md font-mono inline-block ${
+                      (runningBalancesMap.get(t.id) ?? 0) >= 0
+                        ? darkMode 
+                          ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" 
+                          : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        : darkMode 
+                          ? "bg-rose-500/10 text-rose-400 border border-rose-500/20" 
+                          : "bg-rose-50 text-rose-700 border border-rose-200"
+                    }`}>
+                      Saldo Líq: {formatCurrency(runningBalancesMap.get(t.id)!, currency?.symbol)}
+                    </span>
+                  )}
                 </div>
 
                 <button
