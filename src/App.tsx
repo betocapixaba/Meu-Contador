@@ -745,6 +745,7 @@ export default function App() {
               darkMode={darkMode}
               onTransactionAdded={fetchData}
               currency={currency}
+              transactions={transactions}
             />
           )}
 

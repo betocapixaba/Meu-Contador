@@ -25,11 +25,13 @@ import { collection, addDoc } from "firebase/firestore";
 import { db, auth } from "../firebase";
 import { isDemoActive, localAddDoc } from "../utils/demoDb";
 import { Currency, formatCurrency } from "../utils/currency";
+import { Transaction } from "../types";
 
 interface AiAgentProps {
   darkMode: boolean;
   onTransactionAdded: () => void;
   currency?: Currency;
+  transactions?: Transaction[];
 }
 
 interface AgentMessage {
@@ -51,7 +53,7 @@ interface AgentMessage {
   status?: "pending" | "confirmed" | "error";
 }
 
-export default function AiAgent({ darkMode, onTransactionAdded, currency }: AiAgentProps) {
+export default function AiAgent({ darkMode, onTransactionAdded, currency, transactions = [] }: AiAgentProps) {
   const [inputText, setInputText] = useState("");
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState("");
@@ -60,7 +62,7 @@ export default function AiAgent({ darkMode, onTransactionAdded, currency }: AiAg
     {
       id: "welcome-1",
       sender: "agent",
-      text: "Olá! Sou o seu Agente de IA para registro de Entradas e Saídas. Pode digitar ou falar um comando como 'Recebi R$ 1.500 do cliente João' ou 'Gastei R$ 45,90 no almoço'.",
+      text: "Olá! Sou o seu Agente de IA para registro e consulta de Entradas e Saídas. Pode falar ou digitar frases como 'Recebi R$ 1.500 do cliente João', 'Gastei R$ 45,90 no almoço' ou me perguntar 'Quanto eu gastei este mês?'.",
       timestamp: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
     }
   ]);
@@ -179,6 +181,7 @@ export default function AiAgent({ darkMode, onTransactionAdded, currency }: AiAg
     }
 
     return {
+      intent: "transaction",
       type,
       amount,
       category,
@@ -209,6 +212,9 @@ export default function AiAgent({ darkMode, onTransactionAdded, currency }: AiAg
     setInputText("");
     setLoading(true);
 
+    const totalIncome = transactions.filter(t => t.type === "receita").reduce((s, t) => s + t.amount, 0);
+    const totalExpense = transactions.filter(t => t.type === "despesa").reduce((s, t) => s + t.amount, 0);
+
     let parsedResult: any = null;
 
     try {
@@ -217,7 +223,13 @@ export default function AiAgent({ darkMode, onTransactionAdded, currency }: AiAg
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           text: textToProcess,
-          currentDate: new Date().toISOString()
+          currentDate: new Date().toISOString(),
+          transactionsSummary: {
+            totalIncome,
+            totalExpense,
+            balance: totalIncome - totalExpense,
+            count: transactions.length
+          }
         })
       });
 
@@ -233,20 +245,30 @@ export default function AiAgent({ darkMode, onTransactionAdded, currency }: AiAg
       setLoading(false);
     }
 
-    // Append Agent Response Message with Parsed Data Card
     const agentMsgId = "agt-" + Date.now();
-    const isRevenue = parsedResult.type === "receita";
 
-    const agentMsg: AgentMessage = {
-      id: agentMsgId,
-      sender: "agent",
-      text: `Entendi! Identifiquei uma ${isRevenue ? "ENTRADA (Receita)" : "SAÍDA (Despesa)"} no valor de ${formatCurrency(parsedResult.amount || 0, currency?.symbol || "R$")}. Confirme os dados abaixo para lançar no sistema:`,
-      timestamp: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
-      parsedData: parsedResult,
-      status: "pending"
-    };
-
-    setMessages(prev => [...prev, agentMsg]);
+    // If intent is conversational chat
+    if (parsedResult.intent === "chat" || !parsedResult.type || parsedResult.amount === undefined) {
+      const agentMsg: AgentMessage = {
+        id: agentMsgId,
+        sender: "agent",
+        text: parsedResult.reply || "Olá! Como posso ajudar nas suas finanças hoje?",
+        timestamp: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+      };
+      setMessages(prev => [...prev, agentMsg]);
+    } else {
+      // Intent is transaction entry
+      const isRevenue = parsedResult.type === "receita";
+      const agentMsg: AgentMessage = {
+        id: agentMsgId,
+        sender: "agent",
+        text: parsedResult.reply || `Entendi! Identifiquei uma ${isRevenue ? "ENTRADA (Receita)" : "SAÍDA (Despesa)"} no valor de ${formatCurrency(parsedResult.amount || 0, currency?.symbol || "R$")}. Confirme os dados abaixo para lançar no sistema:`,
+        timestamp: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+        parsedData: parsedResult,
+        status: "pending"
+      };
+      setMessages(prev => [...prev, agentMsg]);
+    }
   };
 
   // Confirm and Save transaction to Firestore / Local DB

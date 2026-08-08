@@ -27,7 +27,7 @@ function getAiClient(): GoogleGenAI {
 }
 
 // Helper: Local dynamic parsing when Gemini is unavailable (Quota/Rate limit/No API Key)
-function generateLocalFallbackCommandParse(text: string, referenceDate: string) {
+function generateLocalFallbackCommandParse(text: string, referenceDate: string, transactionsSummary?: any) {
   const lower = text.toLowerCase().trim();
   const ref = new Date(referenceDate);
   let year = ref.getFullYear();
@@ -48,6 +48,18 @@ function generateLocalFallbackCommandParse(text: string, referenceDate: string) 
     day = String(anteontem.getDate()).padStart(2, "0");
   }
 
+  // Check if this is a conversational question or general chat rather than a financial transaction to log
+  const questionKeywords = ["quanto", "como", "qual", "quais", "onde", "por que", "porque", "olá", "ola", "oi", "bom dia", "boa tarde", "boa noite", "ajuda", "dica", "resumo", "saldo", "relatório", "relatorio", "quem é você", "o que você faz"];
+  const isQuestion = questionKeywords.some(kw => lower.startsWith(kw) || lower.includes("quanto ") || lower.includes("como ") || lower.includes("quais ") || lower === "oi" || lower === "olá");
+
+  const revenueKeywords = [
+    "recebi", "ganhei", "receita", "salario", "salário", "ganho", "ganhos", 
+    "provento", "pix de", "recebimento", "vendi", "faturamento", "faturei", 
+    "receber", "entrada", "faturou", "ganhou", "salários"
+  ];
+  const expenseKeywords = ["gastei", "paguei", "comprei", "despesa", "saida", "saída", "custo", "pagamento", "almoço", "jantar", "uber", "gasolina", "mercado"];
+  const hasTransactionKeyword = revenueKeywords.some(kw => lower.includes(kw)) || expenseKeywords.some(kw => lower.includes(kw));
+
   // Regex to extract numeric values (supporting formats like: 1500, 1.500, 15,50, 15.50, R$ 50, $25, etc.)
   const numbers = lower.match(/(?:r\$\s*|\$\s*)?(\d+(?:\.\d{3})*(?:,\d{1,2})?|\d+(?:\.\d+)?)/gi);
   let amount = 0;
@@ -67,12 +79,37 @@ function generateLocalFallbackCommandParse(text: string, referenceDate: string) 
     }
   }
 
+  // If user is asking a conversational question or no transaction keyword or amount was given
+  if (isQuestion || (!hasTransactionKeyword && amount === 0)) {
+    let reply = "Olá! Sou o seu Agente de IA Financeira. Você pode me pedir para lançar receitas e despesas (ex: 'Recebi 500 do João' ou 'Gastei 40 no mercado') ou fazer perguntas sobre suas finanças!";
+    
+    if (lower.includes("quanto") && (lower.includes("gastei") || lower.includes("despesa"))) {
+      if (transactionsSummary && transactionsSummary.totalExpense !== undefined) {
+        reply = `Você possui R$ ${Number(transactionsSummary.totalExpense).toLocaleString("pt-BR", { minimumFractionDigits: 2 })} em despesas registradas.`;
+      } else {
+        reply = "Seus lançamentos de despesas podem ser acompanhados no Painel Principal e na aba Despesas.";
+      }
+    } else if (lower.includes("quanto") && (lower.includes("ganhei") || lower.includes("recebi") || lower.includes("receita"))) {
+      if (transactionsSummary && transactionsSummary.totalIncome !== undefined) {
+        reply = `Suas receitas totais cadastradas somam R$ ${Number(transactionsSummary.totalIncome).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}.`;
+      } else {
+        reply = "Você pode acompanhar todas as suas receitas cadastradas na aba Receitas.";
+      }
+    } else if (lower.includes("saldo")) {
+      if (transactionsSummary && transactionsSummary.balance !== undefined) {
+        reply = `Seu saldo atual é de R$ ${Number(transactionsSummary.balance).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}.`;
+      } else {
+        reply = "Consulte o seu saldo total disponível diretamente no cartão do Painel Principal.";
+      }
+    }
+
+    return {
+      intent: "chat",
+      reply
+    };
+  }
+
   let type: "receita" | "despesa" = "despesa";
-  const revenueKeywords = [
-    "recebi", "ganhei", "receita", "salario", "salário", "ganho", "ganhos", 
-    "provento", "pix de", "recebimento", "vendi", "faturamento", "faturei", 
-    "receber", "entrada", "faturou", "ganhou", "salários"
-  ];
   for (const kw of revenueKeywords) {
     if (lower.includes(kw)) {
       type = "receita";
@@ -126,6 +163,7 @@ function generateLocalFallbackCommandParse(text: string, referenceDate: string) 
   const isRecurrent = lower.includes("mensal") || lower.includes("recorrente") || lower.includes("assinatura") || lower.includes("netflix") || lower.includes("spotify") || lower.includes("aluguel") || lower.includes("todo mês") || lower.includes("todo mes");
 
   return {
+    intent: "transaction",
     type,
     amount,
     category,
@@ -134,13 +172,14 @@ function generateLocalFallbackCommandParse(text: string, referenceDate: string) 
     description,
     date: `${year}-${month}-${day}`,
     isRecurrent,
-    confidence: 0.65
+    confidence: 0.75,
+    reply: `Entendi! Identifiquei uma ${type === "receita" ? "ENTRADA (Receita)" : "SAÍDA (Despesa)"} de R$ ${amount.toFixed(2)}.`
   };
 }
 
 // 1. API: Parse voice command or text command
 app.post("/api/parse-command", async (req, res) => {
-  const { text, currentDate } = req.body;
+  const { text, currentDate, transactionsSummary } = req.body;
   if (!text) {
     res.status(400).json({ error: "O texto do comando é obrigatório." });
     return;
@@ -152,36 +191,46 @@ app.post("/api/parse-command", async (req, res) => {
     const ai = getAiClient();
 
     const systemPrompt = `Você é o "Contador", um assistente financeiro inteligente e amigável para brasileiros ou quem usa o app.
-Sua tarefa é analisar uma frase falada ou digitada em português sobre finanças e extrair os dados estruturados no formato JSON especificado.
+Sua tarefa é analisar uma frase falada ou digitada em português sobre finanças e determinar a intenção do usuário:
+1. Se for para REGISTRAR ou LANÇAR uma transação (ex: "Gastei 50 no almoço", "Recebi 1500 do cliente João"), defina intent = "transaction".
+2. Se for uma PERGUNTA, CONVERSA ou SAUDAÇÃO (ex: "Olá", "Quanto eu gastei este mês?", "Como economizar?"), defina intent = "chat" e escreva uma resposta amigável em "reply".
 
-Considere a data e hora de referência do celular do usuário: ${referenceDate}.
+Contexto de referência do celular:
+- Data de referência: ${referenceDate}
+- Resumo financeiro do usuário: ${JSON.stringify(transactionsSummary || {})}
 
-Você deve retornar APENAS o objeto JSON abaixo, sem blocos de código markdown ou texto explicativo:
+Retorne APENAS um objeto JSON válido no seguinte formato:
 {
-  "type": "receita" ou "despesa",
-  "amount": número (valor da transação),
+  "intent": "transaction" ou "chat",
+  "reply": "Texto de resposta explicativo ou saudação para o usuário",
+  "type": "receita" ou "despesa" (somente se intent = transaction),
+  "amount": número (valor da transação se intent = transaction),
   "category": categoria (ex: "Alimentação", "Transporte", "Moradia", "Salário", "Serviços", "Lazer", "Saúde", "Outros"),
-  "location": local/estabelecimento onde ocorreu (ex: "Dunkin", "Uber", "Supermercado") ou null,
-  "client": nome do cliente (se receita, ex: nome da pessoa ou empresa que pagou) ou null,
+  "location": local/estabelecimento onde ocorreu ou null,
+  "client": nome do cliente (se receita) ou null,
   "description": descrição sucinta da transação,
-  "date": data da transação no formato "YYYY-MM-DD" (se não especificado na frase, use o dia da data de referência),
-  "isRecurrent": boolean (se parecer algo recorrente mensalmente como aluguel, assinatura, salário),
-  "confidence": número de 0 a 1 indicando sua certeza
-}
-
-Se o valor estiver em dólares ($), reais (R$) ou outra moeda, extraia apenas o número cru (ex: 15 para "15 dólares", 350 para "350 dólares").
-Seja inteligente ao categorizar. Ex: "café" -> "Alimentação", "Uber" -> "Transporte", "fatura de luz" -> "Moradia", "salário" -> "Salário", "instalação" -> "Serviços".
-Se a frase indicar recebimento/ganho, o tipo é "receita". Se indicar gasto/compra/pagamento, o tipo é "despesa".`;
+  "date": data da transação no formato "YYYY-MM-DD",
+  "isRecurrent": boolean,
+  "confidence": número de 0 a 1
+}`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: `Analise a frase: "${text}"`,
+      model: "gemini-2.5-flash",
+      contents: `Mensagem do usuário: "${text}"`,
       config: {
         systemInstruction: systemPrompt,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
           properties: {
+            intent: {
+              type: Type.STRING,
+              description: "Deve ser 'transaction' ou 'chat'."
+            },
+            reply: {
+              type: Type.STRING,
+              description: "Resposta amigável para o usuário em português."
+            },
             type: {
               type: Type.STRING,
               description: "Deve ser 'receita' ou 'despesa'."
@@ -192,7 +241,7 @@ Se a frase indicar recebimento/ganho, o tipo é "receita". Se indicar gasto/comp
             },
             category: {
               type: Type.STRING,
-              description: "Categoria da transação (ex: Alimentação, Transporte, Moradia, Salário, Serviços, Lazer, Saúde, Outros)."
+              description: "Categoria da transação."
             },
             location: {
               type: Type.STRING,
@@ -212,20 +261,19 @@ Se a frase indicar recebimento/ganho, o tipo é "receita". Se indicar gasto/comp
             },
             isRecurrent: {
               type: Type.BOOLEAN,
-              description: "Verdadeiro se parecer um pagamento/recebimento mensal recorrente."
+              description: "Verdadeiro se for pagamento/recebimento mensal recorrente."
             },
             confidence: {
               type: Type.NUMBER,
               description: "Nível de certeza entre 0 e 1."
             }
           },
-          required: ["type", "amount", "category", "description", "date", "isRecurrent", "confidence"]
+          required: ["intent", "reply"]
         }
       }
     });
 
     const responseText = response.text || "";
-    // Clean up any markdown json blocks if the model included them
     const cleanJson = responseText
       .replace(/```json/g, "")
       .replace(/```/g, "")
@@ -236,13 +284,12 @@ Se a frase indicar recebimento/ganho, o tipo é "receita". Se indicar gasto/comp
       res.json(parsedData);
     } catch (parseError) {
       console.error("Failed to parse Gemini response as JSON, falling back locally:", responseText);
-      const localResult = generateLocalFallbackCommandParse(text, referenceDate);
+      const localResult = generateLocalFallbackCommandParse(text, referenceDate, transactionsSummary);
       res.json(localResult);
     }
   } catch (error: any) {
     console.warn("Parse command fallback activated: Gemini rate limited/offline.", error);
-    // Fall back smoothly to high-fidelity rule-based local command parser
-    const localResult = generateLocalFallbackCommandParse(text, referenceDate);
+    const localResult = generateLocalFallbackCommandParse(text, referenceDate, transactionsSummary);
     res.json(localResult);
   }
 });
@@ -279,7 +326,7 @@ Você deve retornar APENAS o objeto JSON abaixo, sem blocos de código markdown 
 }`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-2.5-flash",
       contents: [
         {
           text: receiptPrompt
@@ -495,7 +542,7 @@ Retorne APENAS um objeto JSON válido, sem markdown:
 }`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-2.5-flash",
       contents: [{ text: analysisPrompt }],
       config: {
         responseMimeType: "application/json",
