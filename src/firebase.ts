@@ -19,5 +19,9 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 // Initialize Auth
 export const auth = getAuth(app);
 
-// Initialize Firestore (with databaseId if available)
-export const db = getFirestore(app, firebaseConfig.databaseId || "(default)");
+// Initialize Firestore (with databaseId if available and long-polling auto detection)
+export const db = getApps().length > 1
+  ? getFirestore(app, firebaseConfig.databaseId || "(default)")
+  : initializeFirestore(app, {
+      experimentalAutoDetectLongPolling: true,
+    }, firebaseConfig.databaseId || "(default)");

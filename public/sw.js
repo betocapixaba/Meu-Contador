@@ -1,15 +1,18 @@
-const CACHE_NAME = "contador-ia-cache-v1";
+const CACHE_NAME = "contador-ia-cache-v2";
 const ASSETS_TO_CACHE = [
   "/",
   "/index.html",
-  "/manifest.json",
-  "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+  "/manifest.json"
 ];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
+    caches.open(CACHE_NAME).then(async (cache) => {
+      try {
+        await cache.addAll(ASSETS_TO_CACHE);
+      } catch (err) {
+        console.warn("Service worker asset caching failed gracefully:", err);
+      }
     }).then(() => self.skipWaiting())
   );
 });
@@ -29,8 +32,12 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
-  // Only cache GET requests
-  if (event.request.method !== "GET" || event.request.url.startsWith(self.location.origin + "/api")) {
+  // Only handle GET requests from same origin and not API endpoints
+  if (
+    event.request.method !== "GET" || 
+    !event.request.url.startsWith(self.location.origin) ||
+    event.request.url.includes("/api/")
+  ) {
     return;
   }
 
@@ -39,19 +46,21 @@ self.addEventListener("fetch", (event) => {
       if (cachedResponse) {
         return cachedResponse;
       }
-      return fetch(event.request).then((response) => {
-        if (!response || response.status !== 200 || response.type !== "basic") {
+      return fetch(event.request)
+        .then((response) => {
+          if (!response || response.status !== 200 || response.type !== "basic") {
+            return response;
+          }
+          const responseToCache = response.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache);
+          }).catch(() => {});
           return response;
-        }
-        const responseToCache = response.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache);
+        })
+        .catch(() => {
+          // Return cached index or empty response instead of failing
+          return caches.match("/index.html") || caches.match("/");
         });
-        return response;
-      }).catch(() => {
-        // Offline fallback
-        return caches.match("/");
-      });
     })
   );
 });
@@ -92,4 +101,5 @@ self.addEventListener("notificationclick", (event) => {
     })
   );
 });
+
 

@@ -44,6 +44,18 @@ export const localDeleteDoc = async (collectionName: string, id: string): Promis
   localStorage.setItem(key, JSON.stringify(filtered));
 };
 
+// Get items from local storage collection
+export const localGetDocs = async <T = any>(collectionName: string, userId?: string): Promise<T[]> => {
+  const key = `demo_${collectionName}`;
+  const localData = localStorage.getItem(key);
+  if (!localData) return [];
+  const items = JSON.parse(localData) as any[];
+  if (userId) {
+    return items.filter(item => item.userId === userId) as T[];
+  }
+  return items as T[];
+};
+
 // Seed initial demo data so the app isn't empty when they first click "Entrar sem Login"
 export const seedInitialDemoData = () => {
   const transactionsKey = "demo_transactions";

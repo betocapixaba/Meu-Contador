@@ -13,13 +13,17 @@ import {
   Camera, 
   RefreshCw,
   X,
-  LogOut
+  LogOut,
+  Building,
+  Bot
 } from "lucide-react";
 import Auth from "./components/Auth";
 import Dashboard from "./components/Dashboard";
 import TransactionsLists from "./components/TransactionsLists";
 import Reports from "./components/Reports";
 import Profile from "./components/Profile";
+import ClientConfig from "./components/ClientConfig";
+import AiAgent from "./components/AiAgent";
 import VoiceAssistant from "./components/VoiceAssistant";
 import ReceiptScanner from "./components/ReceiptScanner";
 import { Transaction, Goal, RecurrentExpense } from "./types";
@@ -49,6 +53,45 @@ export default function App() {
   const handleCurrencyChange = (newCurrency: Currency) => {
     setCurrency(newCurrency);
     localStorage.setItem("contador_ia_currency", JSON.stringify(newCurrency));
+  };
+
+  // Helper to resolve the logged in user's full/display name for the app header
+  const getUserDisplayName = () => {
+    if (!user) return "Visitante";
+
+    // 1. Check user.displayName if it's set and not empty
+    if (user.displayName && user.displayName.trim() !== "" && user.displayName !== "Visitante") {
+      return user.displayName.trim();
+    }
+
+    // 2. Check local saved display name (e.g. set during local demo mode or profile update)
+    const savedDemoName = localStorage.getItem("contador_ia_demo_display_name");
+    if (savedDemoName && savedDemoName.trim() !== "") {
+      return savedDemoName.trim();
+    }
+
+    // 3. Extract name from email if user logged in via email (e.g. betocapixaba@gmail.com -> Betocapixaba)
+    if (user.email && user.email.includes("@")) {
+      const emailPrefix = user.email.split("@")[0];
+      const formatted = emailPrefix
+        .replace(/[._-]/g, " ")
+        .split(" ")
+        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(" ");
+      return formatted;
+    }
+
+    return user.displayName || "Usuário Cadastrado";
+  };
+
+  const getUserInitials = () => {
+    const name = getUserDisplayName();
+    if (!name) return "US";
+    const parts = name.trim().split(" ").filter(Boolean);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
   };
   
   // App data states
@@ -487,19 +530,51 @@ export default function App() {
             <div className={`w-9 h-9 md:w-10 md:h-10 bg-gradient-to-tr from-purple-500 to-purple-600 rounded-full flex items-center justify-center text-white font-black shadow-md shrink-0 text-xs transition-all ${
               activeTab === "Perfil" ? "ring-2 ring-purple-500 ring-offset-2 ring-offset-slate-900" : "shadow-purple-500/15"
             }`}>
-              {user?.displayName?.substring(0, 2).toUpperCase() || "ED"}
+              {getUserInitials()}
             </div>
             <div className="min-w-0">
               <p className={`text-[8px] md:text-[9px] uppercase tracking-wider font-extrabold leading-none ${
                 darkMode ? "text-purple-400" : "text-purple-600"
               }`}>Ver Perfil ⚙️</p>
-              <h1 className="text-xs md:text-sm font-bold leading-tight mt-0.5 text-slate-900 dark:text-white truncate max-w-[80px] xs:max-w-[120px] md:max-w-none">
-                {user?.displayName?.split(" ")[0] || "Visitante"}
+              <h1 className="text-xs md:text-sm font-bold leading-tight mt-0.5 text-slate-900 dark:text-white truncate max-w-[120px] xs:max-w-[160px] md:max-w-[200px]" title={getUserDisplayName()}>
+                {getUserDisplayName()}
               </h1>
             </div>
           </div>
 
           <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
+            <button
+              id="header-ai-agent-btn"
+              onClick={() => setActiveTab("AgenteIA")}
+              title="Agente de IA"
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 md:px-3 md:py-1.5 rounded-xl border transition-all duration-200 active:scale-90 text-xs font-extrabold shrink-0 ${
+                activeTab === "AgenteIA"
+                  ? "bg-purple-600 border-purple-500 text-white shadow-md shadow-purple-500/20"
+                  : darkMode 
+                    ? "bg-purple-500/10 border-purple-500/20 text-purple-400 hover:text-purple-300 hover:bg-purple-500/20" 
+                    : "bg-purple-50 border-purple-100 text-purple-700 hover:bg-purple-100 shadow-xs"
+              }`}
+            >
+              <Bot className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
+              <span className="hidden xs:inline">Agente IA</span>
+            </button>
+
+            <button
+              id="header-client-config-btn"
+              onClick={() => setActiveTab("Clientes")}
+              title="Configuração do Cliente"
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 md:px-3 md:py-1.5 rounded-xl border transition-all duration-200 active:scale-90 text-xs font-extrabold shrink-0 ${
+                activeTab === "Clientes"
+                  ? "bg-purple-600 border-purple-500 text-white shadow-md shadow-purple-500/20"
+                  : darkMode 
+                    ? "bg-slate-850 border-slate-800 text-slate-300 hover:text-white" 
+                    : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100 shadow-xs"
+              }`}
+            >
+              <Building className="w-3.5 h-3.5" />
+              <span className="hidden xs:inline">Clientes</span>
+            </button>
+
             <button
               id="header-scan-shortcut-btn"
               onClick={() => setShowScanModal(true)}
@@ -543,6 +618,41 @@ export default function App() {
           </div>
         </header>
 
+        {/* Quick Top Sub-Navigation Pills */}
+        <div className={`px-4 py-2 border-b flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0 ${
+          darkMode ? "bg-slate-950/60 border-slate-900" : "bg-slate-50/80 border-slate-200/60"
+        }`}>
+          {[
+            { id: "Início", label: "Início", icon: Home },
+            { id: "AgenteIA", label: "Agente IA", icon: Bot },
+            { id: "Receitas", label: "Receitas", icon: ArrowUpRight },
+            { id: "Despesas", label: "Despesas", icon: ArrowDownLeft },
+            { id: "Clientes", label: "Config do Cliente", icon: Building },
+            { id: "Relatórios", label: "Relatórios", icon: FileText },
+            { id: "Perfil", label: "Perfil", icon: UserIcon }
+          ].map((tab) => {
+            const Icon = tab.icon;
+            const isSelected = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                id={`subnav-${tab.id.toLowerCase()}-btn`}
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition shrink-0 ${
+                  isSelected 
+                    ? "bg-purple-600 text-white shadow-xs" 
+                    : darkMode 
+                      ? "text-slate-400 hover:text-white hover:bg-slate-900" 
+                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
         {/* Main content body scrollable */}
         <main className="flex-1 overflow-y-auto px-6 py-5 no-scrollbar pb-24 relative">
           {activeTab === "Início" && (
@@ -555,6 +665,14 @@ export default function App() {
               goals={goals}
               onRefresh={fetchData}
               onDeleteTransaction={handleDeleteTransaction}
+              currency={currency}
+            />
+          )}
+
+          {activeTab === "AgenteIA" && (
+            <AiAgent 
+              darkMode={darkMode}
+              onTransactionAdded={fetchData}
               currency={currency}
             />
           )}
@@ -577,6 +695,15 @@ export default function App() {
               initialType="despesa"
               onRefresh={fetchData}
               onDeleteTransaction={handleDeleteTransaction}
+              currency={currency}
+            />
+          )}
+
+          {activeTab === "Clientes" && (
+            <ClientConfig 
+              darkMode={darkMode}
+              transactions={transactions}
+              onRefresh={fetchData}
               currency={currency}
             />
           )}

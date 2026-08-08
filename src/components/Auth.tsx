@@ -67,9 +67,13 @@ export default function Auth({ darkMode, onDemoLogin }: AuthProps) {
           throw new Error("Por favor, insira o seu nome.");
         }
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        await updateProfile(userCredential.user, { displayName: name });
+        await updateProfile(userCredential.user, { displayName: name.trim() });
+        localStorage.setItem("contador_ia_demo_display_name", name.trim());
       } else {
-        await signInWithEmailAndPassword(auth, email, password);
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        if (userCredential.user.displayName) {
+          localStorage.setItem("contador_ia_demo_display_name", userCredential.user.displayName);
+        }
       }
     } catch (err: any) {
       console.warn("Auth error:", err.message || err);
