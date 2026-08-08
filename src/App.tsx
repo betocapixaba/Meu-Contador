@@ -25,7 +25,6 @@ import Dashboard from "./components/Dashboard";
 import TransactionsLists from "./components/TransactionsLists";
 import Reports from "./components/Reports";
 import Profile from "./components/Profile";
-import ClientConfig from "./components/ClientConfig";
 import AiAgent from "./components/AiAgent";
 import VoiceAssistant from "./components/VoiceAssistant";
 import ReceiptScanner from "./components/ReceiptScanner";
@@ -60,6 +59,7 @@ export default function App() {
 
   // Full Screen Mode for Mobile Devices
   const [isFullScreen, setIsFullScreen] = useState(true);
+  const [hideFsBanner, setHideFsBanner] = useState(false);
 
   useEffect(() => {
     const handleFsChange = () => {
@@ -557,6 +557,33 @@ export default function App() {
               <div className={`w-5 h-2.5 rounded-sm border ${darkMode ? "border-slate-500" : "border-slate-700"} p-0.5 flex items-center`}>
                 <div className={`h-full w-4/5 rounded-2xs ${darkMode ? "bg-slate-400" : "bg-slate-800"}`}></div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Full Screen Mode Notification Banner on Mobile */}
+        {!isFullScreen && !hideFsBanner && (
+          <div className="bg-gradient-to-r from-purple-800 to-indigo-900 text-white text-xs px-3.5 py-2 flex items-center justify-between border-b border-purple-700/50 shadow-sm z-20 shrink-0">
+            <div className="flex items-center gap-2">
+              <Smartphone className="w-4 h-4 text-purple-300 shrink-0 animate-bounce" />
+              <span className="text-[11px] font-medium leading-tight">
+                Remova a barra do navegador ativando a <strong>Tela Cheia</strong> no celular.
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                onClick={toggleFullScreen}
+                className="bg-white text-purple-950 font-extrabold text-[10px] px-2.5 py-1 rounded-lg shadow-sm hover:bg-purple-100 transition active:scale-95"
+              >
+                Tela Cheia
+              </button>
+              <button
+                onClick={() => setHideFsBanner(true)}
+                className="p-1 text-purple-300 hover:text-white transition"
+                title="Ocultar aviso"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
             </div>
           </div>
         )}
