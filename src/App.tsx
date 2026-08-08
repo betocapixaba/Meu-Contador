@@ -39,7 +39,7 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     const saved = localStorage.getItem("contador_ia_dark");
-    return saved ? saved === "true" : true; // Default to dark mode for fintech premium look
+    return saved ? saved === "true" : false; // Default to light mode (modo dia)
   });
 
   const [activeTab, setActiveTab] = useState<string>("Início");

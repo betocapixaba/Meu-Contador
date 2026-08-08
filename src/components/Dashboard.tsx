@@ -1,10 +1,11 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { 
   Eye, 
   EyeOff, 
   ArrowUpRight, 
   ArrowDownLeft, 
   TrendingUp, 
+  TrendingDown,
   Calendar, 
   Plus, 
   Sparkles, 
@@ -12,7 +13,11 @@ import {
   AlertCircle,
   Clock,
   Briefcase,
-  Trash2
+  Trash2,
+  DollarSign,
+  Globe,
+  RefreshCcw,
+  Info
 } from "lucide-react";
 import { deleteDoc, doc } from "firebase/firestore";
 import { db } from "../firebase";
@@ -50,6 +55,45 @@ export default function Dashboard({
     new Date().toISOString().substring(0, 7) // e.g. "2026-07"
   );
   const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
+
+  // USD/BRL Real-Time Exchange Rate
+  const [usdRate, setUsdRate] = useState<{
+    bid: number;
+    pctChange: number;
+    updatedAt: string;
+  }>({
+    bid: 5.65,
+    pctChange: 0.18,
+    updatedAt: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+  });
+  const [loadingUsdRate, setLoadingUsdRate] = useState(false);
+
+  const fetchUsdExchangeRate = async () => {
+    setLoadingUsdRate(true);
+    try {
+      const res = await fetch("https://economia.awesomeapi.com.br/json/last/USD-BRL");
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.USDBRL) {
+          setUsdRate({
+            bid: parseFloat(data.USDBRL.bid),
+            pctChange: parseFloat(data.USDBRL.pctChange || "0"),
+            updatedAt: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("Could not fetch live USD rate:", err);
+    } finally {
+      setLoadingUsdRate(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUsdExchangeRate();
+    const interval = setInterval(fetchUsdExchangeRate, 60000); // refresh every minute
+    return () => clearInterval(interval);
+  }, []);
 
   // Month options for filter (last 6 months)
   const getMonthOptions = () => {
@@ -137,6 +181,76 @@ export default function Dashboard({
 
   return (
     <div className="space-y-6">
+      {/* Real-Time USD x BRL Exchange Rate Banner (Minimized / Compact) */}
+      <div className={`p-2.5 px-3.5 rounded-xl border transition-all ${
+        darkMode 
+          ? "bg-slate-900/90 border-slate-800 text-slate-100 shadow-xs" 
+          : "bg-gradient-to-r from-emerald-50/80 via-teal-50/50 to-blue-50/80 border-emerald-100/90 text-slate-800 shadow-2xs"
+      }`}>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 overflow-hidden">
+            <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 flex items-center justify-center shrink-0">
+              <Globe className="w-4 h-4 animate-pulse" />
+            </div>
+            
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                  USD/BRL
+                </span>
+                <span className="flex h-1.5 w-1.5 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                </span>
+              </div>
+
+              <span className="text-sm font-black font-mono shrink-0">
+                R$ {usdRate.bid.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+
+              <span className={`text-[10px] font-bold flex items-center font-mono shrink-0 ${
+                usdRate.pctChange >= 0 
+                  ? "text-emerald-600 dark:text-emerald-400" 
+                  : "text-rose-600 dark:text-rose-400"
+              }`}>
+                {usdRate.pctChange >= 0 ? <TrendingUp className="w-3 h-3 mr-0.5" /> : <TrendingDown className="w-3 h-3 mr-0.5" />}
+                {usdRate.pctChange >= 0 ? `+${usdRate.pctChange.toFixed(2)}%` : `${usdRate.pctChange.toFixed(2)}%`}
+              </span>
+
+              <span className={`text-[9px] hidden sm:inline ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
+                ({usdRate.updatedAt})
+              </span>
+            </div>
+          </div>
+
+          <button
+            id="refresh-usd-rate-btn"
+            onClick={fetchUsdExchangeRate}
+            disabled={loadingUsdRate}
+            title="Atualizar cotação do Dólar"
+            className={`p-1.5 rounded-lg border text-xs transition active:scale-95 flex items-center gap-1 shrink-0 ${
+              darkMode 
+                ? "bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700" 
+                : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 shadow-2xs"
+            }`}
+          >
+            <RefreshCcw className={`w-3 h-3 ${loadingUsdRate ? "animate-spin text-emerald-500" : ""}`} />
+            <span className="hidden sm:inline text-[10px] font-bold">Atualizar</span>
+          </button>
+        </div>
+
+        {/* Note about transfer companies paying $0.10 less */}
+        <div className={`mt-1.5 pt-1.5 border-t text-[10px] flex items-center gap-1.5 ${
+          darkMode ? "border-slate-800/80 text-slate-300" : "border-emerald-200/50 text-slate-700"
+        }`}>
+          <Info className="w-3 h-3 text-emerald-500 shrink-0" />
+          <p className="leading-tight text-[10px]">
+            <span className="font-bold text-emerald-700 dark:text-emerald-300">Empresas de envio: </span>
+            pagem <strong className="text-emerald-600 dark:text-emerald-400">$0.10 a menos</strong> (Estimado: <strong className="font-mono bg-emerald-500/10 px-1 py-0.2 rounded text-emerald-700 dark:text-emerald-300 font-bold">R$ {Math.max(0, usdRate.bid - 0.10).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>/USD).
+          </p>
+        </div>
+      </div>
+
       {/* Upper Month Selector */}
       <div className="flex justify-between items-center">
         <div>
