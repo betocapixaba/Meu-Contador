@@ -309,9 +309,9 @@ export default function ClientConfig({
             <Building className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-lg font-black tracking-tight">Configuração do Cliente</h1>
+            <h1 className="text-lg font-black tracking-tight">Configuração do Usuário</h1>
             <p className={`text-xs ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
-              Gerencie seus clientes, adicione receitas e controle despesas por cliente.
+              Gerencie seus clientes e dados de usuários, adicione receitas e controle despesas por conta.
             </p>
           </div>
         </div>

@@ -627,7 +627,7 @@ export default function App() {
             <button
               id="header-client-config-btn"
               onClick={() => setActiveTab("Clientes")}
-              title="Configuração do Cliente"
+              title="Configuração do Usuário"
               className={`flex items-center gap-1.5 px-2.5 py-1.5 md:px-3 md:py-1.5 rounded-xl border transition-all duration-200 active:scale-90 text-xs font-extrabold shrink-0 ${
                 activeTab === "Clientes"
                   ? "bg-purple-600 border-purple-500 text-white shadow-md shadow-purple-500/20"
@@ -637,7 +637,7 @@ export default function App() {
               }`}
             >
               <Building className="w-3.5 h-3.5" />
-              <span className="hidden xs:inline">Clientes</span>
+              <span className="hidden xs:inline">Usuários</span>
             </button>
 
             <button
@@ -692,7 +692,7 @@ export default function App() {
             { id: "AgenteIA", label: "Agente IA", icon: Bot },
             { id: "Receitas", label: "Receitas", icon: ArrowUpRight },
             { id: "Despesas", label: "Despesas", icon: ArrowDownLeft },
-            { id: "Clientes", label: "Config do Cliente", icon: Building },
+            { id: "Clientes", label: "Config do Usuário", icon: Building },
             { id: "Relatórios", label: "Relatórios", icon: FileText },
             { id: "Perfil", label: "Perfil", icon: UserIcon }
           ].map((tab) => {
