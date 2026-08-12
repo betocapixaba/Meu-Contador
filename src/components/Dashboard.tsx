@@ -113,7 +113,16 @@ export default function Dashboard({
   useEffect(() => {
     fetchUsdExchangeRate();
     const interval = setInterval(fetchUsdExchangeRate, 30000); // refresh every 30 seconds for live rates
-    return () => clearInterval(interval);
+
+    const handleAppRefresh = () => {
+      fetchUsdExchangeRate();
+    };
+    window.addEventListener("app-refresh", handleAppRefresh);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("app-refresh", handleAppRefresh);
+    };
   }, []);
 
   // Month options for filter (last 6 months)

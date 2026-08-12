@@ -339,6 +339,20 @@ export default function App() {
     }
   };
 
+  // Global Refresh Handler for header button
+  const handleGlobalRefresh = async () => {
+    setDataLoading(true);
+    try {
+      await fetchData();
+      window.dispatchEvent(new CustomEvent("app-refresh"));
+      setToast({ message: "Dados e cotações atualizados com sucesso!", type: "success" });
+    } catch (e) {
+      setToast({ message: "Erro ao atualizar dados.", type: "error" });
+    } finally {
+      setDataLoading(false);
+    }
+  };
+
   // Delete transaction handler with optimistic UI update
   const handleDeleteTransaction = async (id: string) => {
     // 1. Optimistically remove from state so it vanishes immediately from UI
@@ -679,12 +693,13 @@ export default function App() {
             
             <button
               id="header-refresh-btn"
-              onClick={fetchData}
+              onClick={handleGlobalRefresh}
               disabled={dataLoading}
+              title="Atualizar dados e cotações"
               className={`p-1.5 md:p-2 rounded-xl border transition-all duration-200 active:scale-90 shrink-0 ${
                 darkMode 
-                  ? "bg-slate-850 border-slate-800 text-slate-300" 
-                  : "bg-slate-50 border-slate-200 text-slate-700 shadow-xs"
+                  ? "bg-slate-850 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800" 
+                  : "bg-slate-50 border-slate-200 text-slate-700 shadow-xs hover:bg-slate-100"
               }`}
             >
               <RefreshCw className={`w-3.5 h-3.5 md:w-4 md:h-4 ${dataLoading ? "animate-spin text-purple-500" : ""}`} />

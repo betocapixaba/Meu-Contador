@@ -206,7 +206,16 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
   useEffect(() => {
     fetchCommoditiesData();
     const interval = setInterval(fetchCommoditiesData, 15000); // 15s auto-refresh
-    return () => clearInterval(interval);
+
+    const handleAppRefresh = () => {
+      fetchCommoditiesData();
+    };
+    window.addEventListener("app-refresh", handleAppRefresh);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("app-refresh", handleAppRefresh);
+    };
   }, []);
 
   useEffect(() => {
