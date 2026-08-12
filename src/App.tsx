@@ -20,7 +20,8 @@ import {
   Minimize,
   Smartphone,
   Sun,
-  Moon
+  Moon,
+  Coins
 } from "lucide-react";
 import Auth from "./components/Auth";
 import Dashboard from "./components/Dashboard";
@@ -30,6 +31,7 @@ import Profile from "./components/Profile";
 import AiAgent from "./components/AiAgent";
 import VoiceAssistant from "./components/VoiceAssistant";
 import ReceiptScanner from "./components/ReceiptScanner";
+import { DigitalCommodities } from "./components/DigitalCommodities";
 import { Transaction, Goal, RecurrentExpense } from "./types";
 import { checkSmartAlerts } from "./notifications";
 import { Currency } from "./utils/currency";
@@ -712,6 +714,7 @@ export default function App() {
         }`}>
           {[
             { id: "Início", label: "Início", icon: Home },
+            { id: "Commodities", label: "Commodities Digitais", icon: Coins },
             { id: "AgenteIA", label: "Agente IA", icon: Bot },
             { id: "Receitas", label: "Receitas", icon: ArrowUpRight },
             { id: "Despesas", label: "Despesas", icon: ArrowDownLeft },
@@ -754,6 +757,10 @@ export default function App() {
               onDeleteTransaction={handleDeleteTransaction}
               currency={currency}
             />
+          )}
+
+          {activeTab === "Commodities" && (
+            <DigitalCommodities darkMode={darkMode} />
           )}
 
           {activeTab === "AgenteIA" && (

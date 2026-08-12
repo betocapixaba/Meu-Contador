@@ -17,7 +17,8 @@ import {
   DollarSign,
   Globe,
   RefreshCcw,
-  Info
+  Info,
+  Coins
 } from "lucide-react";
 import { deleteDoc, doc } from "firebase/firestore";
 import { db } from "../firebase";
@@ -64,26 +65,46 @@ export default function Dashboard({
   }>({
     bid: 5.65,
     pctChange: 0.18,
-    updatedAt: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+    updatedAt: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
   });
   const [loadingUsdRate, setLoadingUsdRate] = useState(false);
 
   const fetchUsdExchangeRate = async () => {
     setLoadingUsdRate(true);
     try {
-      const res = await fetch("https://economia.awesomeapi.com.br/json/last/USD-BRL");
+      // 1. Primary: Try backend real-time route with cache-busting
+      const res = await fetch(`/api/usd-rate?t=${Date.now()}`);
       if (res.ok) {
         const data = await res.json();
+        if (data && typeof data.bid === "number" && !isNaN(data.bid)) {
+          setUsdRate({
+            bid: data.bid,
+            pctChange: typeof data.pctChange === "number" ? data.pctChange : 0,
+            updatedAt: data.fullTimestamp || data.updatedAt || new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+          });
+          setLoadingUsdRate(false);
+          return;
+        }
+      }
+    } catch {
+      // Fallback to client fetch if server API route is unreachable
+    }
+
+    // 2. Client fallback with cache-buster
+    try {
+      const resDirect = await fetch(`https://economia.awesomeapi.com.br/json/last/USD-BRL?t=${Date.now()}`);
+      if (resDirect.ok) {
+        const data = await resDirect.json();
         if (data && data.USDBRL) {
           setUsdRate({
             bid: parseFloat(data.USDBRL.bid),
             pctChange: parseFloat(data.USDBRL.pctChange || "0"),
-            updatedAt: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+            updatedAt: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
           });
         }
       }
     } catch (err) {
-      console.warn("Could not fetch live USD rate:", err);
+      console.warn("Could not fetch live USD rate directly:", err);
     } finally {
       setLoadingUsdRate(false);
     }
@@ -91,7 +112,7 @@ export default function Dashboard({
 
   useEffect(() => {
     fetchUsdExchangeRate();
-    const interval = setInterval(fetchUsdExchangeRate, 60000); // refresh every minute
+    const interval = setInterval(fetchUsdExchangeRate, 30000); // refresh every 30 seconds for live rates
     return () => clearInterval(interval);
   }, []);
 
@@ -223,20 +244,36 @@ export default function Dashboard({
             </div>
           </div>
 
-          <button
-            id="refresh-usd-rate-btn"
-            onClick={fetchUsdExchangeRate}
-            disabled={loadingUsdRate}
-            title="Atualizar cotação do Dólar"
-            className={`p-1.5 rounded-lg border text-xs transition active:scale-95 flex items-center gap-1 shrink-0 ${
-              darkMode 
-                ? "bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700" 
-                : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 shadow-2xs"
-            }`}
-          >
-            <RefreshCcw className={`w-3 h-3 ${loadingUsdRate ? "animate-spin text-emerald-500" : ""}`} />
-            <span className="hidden sm:inline text-[10px] font-bold">Atualizar</span>
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              id="goto-commodities-tab-btn"
+              onClick={() => onSelectTab("Commodities")}
+              title="Ver Commodities Digitais"
+              className={`p-1.5 px-2 rounded-lg border text-xs transition active:scale-95 flex items-center gap-1 ${
+                darkMode 
+                  ? "bg-purple-900/40 border-purple-800/80 text-purple-300 hover:text-white hover:bg-purple-800/50" 
+                  : "bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100/80 shadow-2xs"
+              }`}
+            >
+              <Coins className="w-3 h-3 text-purple-500" />
+              <span className="text-[10px] font-extrabold">Commodities</span>
+            </button>
+
+            <button
+              id="refresh-usd-rate-btn"
+              onClick={fetchUsdExchangeRate}
+              disabled={loadingUsdRate}
+              title="Atualizar cotação do Dólar"
+              className={`p-1.5 rounded-lg border text-xs transition active:scale-95 flex items-center gap-1 shrink-0 ${
+                darkMode 
+                  ? "bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700" 
+                  : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 shadow-2xs"
+              }`}
+            >
+              <RefreshCcw className={`w-3 h-3 ${loadingUsdRate ? "animate-spin text-emerald-500" : ""}`} />
+              <span className="hidden sm:inline text-[10px] font-bold">Atualizar</span>
+            </button>
+          </div>
         </div>
 
         {/* Note about transfer companies paying $0.10 less */}

@@ -588,6 +588,412 @@ Retorne APENAS um objeto JSON válido, sem markdown:
   }
 });
 
+// 5. API: Real-Time USD to BRL Exchange Rate Endpoint
+app.get("/api/usd-rate", async (req, res) => {
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+
+  const now = new Date();
+  const timeFormatted = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
+  try {
+    // Primary source: AwesomeAPI with cache-buster query parameter
+    const response = await fetch(`https://economia.awesomeapi.com.br/json/last/USD-BRL?t=${Date.now()}`, {
+      headers: { "Cache-Control": "no-cache" }
+    });
+    if (response.ok) {
+      const data = await response.json();
+      if (data && data.USDBRL) {
+        const bid = parseFloat(data.USDBRL.bid);
+        const pctChange = parseFloat(data.USDBRL.pctChange || "0");
+        const createDate = data.USDBRL.create_date;
+        const marketTime = createDate 
+          ? new Date(createDate.replace(" ", "T")).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+          : timeFormatted;
+
+        return res.json({
+          bid,
+          pctChange,
+          high: parseFloat(data.USDBRL.high || "0"),
+          low: parseFloat(data.USDBRL.low || "0"),
+          updatedAt: marketTime,
+          fullTimestamp: timeFormatted,
+          source: "AwesomeAPI (Tempo Real)"
+        });
+      }
+    }
+  } catch (err) {
+    console.warn("Primary AwesomeAPI rate fetch failed, trying fallback:", err);
+  }
+
+  // Fallback source 1: Open Exchange Rates / ER API
+  try {
+    const fbRes = await fetch(`https://open.er-api.com/v6/latest/USD?t=${Date.now()}`);
+    if (fbRes.ok) {
+      const fbData = await fbRes.json();
+      if (fbData && fbData.rates && fbData.rates.BRL) {
+        return res.json({
+          bid: parseFloat(fbData.rates.BRL),
+          pctChange: 0,
+          updatedAt: timeFormatted,
+          fullTimestamp: timeFormatted,
+          source: "ExchangeRate API"
+        });
+      }
+    }
+  } catch (err2) {
+    console.warn("Fallback rate fetch failed:", err2);
+  }
+
+  // Fallback source 2: ExchangeRate-API
+  try {
+    const fb2Res = await fetch(`https://api.exchangerate-api.com/v4/latest/USD?t=${Date.now()}`);
+    if (fb2Res.ok) {
+      const fb2Data = await fb2Res.json();
+      if (fb2Data && fb2Data.rates && fb2Data.rates.BRL) {
+        return res.json({
+          bid: parseFloat(fb2Data.rates.BRL),
+          pctChange: 0,
+          updatedAt: timeFormatted,
+          fullTimestamp: timeFormatted,
+          source: "ExchangeRate-API"
+        });
+      }
+    }
+  } catch (err3) {
+    console.warn("Fallback 2 rate fetch failed:", err3);
+  }
+
+  return res.json({
+    bid: 5.65,
+    pctChange: 0,
+    updatedAt: timeFormatted,
+    fullTimestamp: timeFormatted,
+    source: "Estimativa"
+  });
+});
+
+// 6. API: Real-Time 16 Digital Commodities (Cryptocurrencies) Endpoint
+app.get("/api/crypto-rates", async (req, res) => {
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+
+  const now = new Date();
+  const timeFormatted = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
+  // List of requested 16 digital commodities
+  const commoditiesList = [
+    { symbol: "BTC", pair: "BTCUSDT", geckoid: "bitcoin", name: "Bitcoin", category: "Reserva de Valor / Ouro Digital" },
+    { symbol: "ETH", pair: "ETHUSDT", geckoid: "ethereum", name: "Ethereum Ether", category: "Contratos Inteligentes" },
+    { symbol: "SOL", pair: "SOLUSDT", geckoid: "solana", name: "Solana", category: "High Performance L1" },
+    { symbol: "XRP", pair: "XRPUSDT", geckoid: "ripple", name: "XRP", category: "Liquidez e Remessas" },
+    { symbol: "ADA", pair: "ADAUSDT", geckoid: "cardano", name: "Cardano", category: "Proof of Stake L1" },
+    { symbol: "DOGE", pair: "DOGEUSDT", geckoid: "dogecoin", name: "Dogecoin", category: "Ativo Memético / P2P" },
+    { symbol: "SHIB", pair: "SHIBUSDT", geckoid: "shiba-inu", name: "Shiba Inu", category: "Ecossistema Memético / L2" },
+    { symbol: "AVAX", pair: "AVAXUSDT", geckoid: "avalanche-2", name: "Avalanche", category: "Subredes & DeFi" },
+    { symbol: "LINK", pair: "LINKUSDT", geckoid: "chainlink", name: "Chainlink", category: "Oráculos de Dados" },
+    { symbol: "DOT", pair: "DOTUSDT", geckoid: "polkadot", name: "Polkadot", category: "Interoperabilidade Multichain" },
+    { symbol: "LTC", pair: "LTCUSDT", geckoid: "litecoin", name: "Litecoin", category: "Pagamentos Rápidos / Prata Digital" },
+    { symbol: "BCH", pair: "BCHUSDT", geckoid: "bitcoin-cash", name: "Bitcoin Cash", category: "Dinheiro Eletrônico P2P" },
+    { symbol: "XLM", pair: "XLMUSDT", geckoid: "stellar", name: "Stellar", category: "Rede de Pagamentos Globais" },
+    { symbol: "HBAR", pair: "HBARUSDT", geckoid: "hedera-hashgraph", name: "Hedera", category: "Hashgraph Enterprise" },
+    { symbol: "XTZ", pair: "XTZUSDT", geckoid: "tezos", name: "Tezos", category: "Self-Amending L1" },
+    { symbol: "APT", pair: "APTUSDT", geckoid: "aptos", name: "Aptos", category: "Move-Based L1" }
+  ];
+
+  // First fetch live USD/BRL rate
+  let usdBrlRate = 5.65;
+  try {
+    const usdRes = await fetch(`https://economia.awesomeapi.com.br/json/last/USD-BRL?t=${Date.now()}`);
+    if (usdRes.ok) {
+      const usdData = await usdRes.json();
+      if (usdData && usdData.USDBRL) {
+        usdBrlRate = parseFloat(usdData.USDBRL.bid) || 5.65;
+      }
+    }
+  } catch (err) {
+    console.warn("Could not fetch USD rate for crypto conversion:", err);
+  }
+
+  // Primary attempt: Binance API 24hr Ticker
+  try {
+    const symbolsParam = JSON.stringify(commoditiesList.map(c => c.pair));
+    const binanceUrl = `https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(symbolsParam)}`;
+    const binanceRes = await fetch(binanceUrl, { headers: { "Cache-Control": "no-cache" } });
+
+    if (binanceRes.ok) {
+      const data = await binanceRes.json();
+      if (Array.isArray(data) && data.length > 0) {
+        const results = commoditiesList.map(item => {
+          const ticker = data.find((t: any) => t.symbol === item.pair);
+          const priceUsd = ticker ? parseFloat(ticker.lastPrice) : 0;
+          const change24h = ticker ? parseFloat(ticker.priceChangePercent) : 0;
+          const high24h = ticker ? parseFloat(ticker.highPrice) : 0;
+          const low24h = ticker ? parseFloat(ticker.lowPrice) : 0;
+          const volume24hUsd = ticker ? parseFloat(ticker.quoteVolume) : 0;
+
+          return {
+            symbol: item.symbol,
+            name: item.name,
+            category: item.category,
+            priceUsd,
+            priceBrl: priceUsd * usdBrlRate,
+            change24h,
+            high24hUsd: high24h,
+            low24hUsd: low24h,
+            volume24hUsd
+          };
+        });
+
+        return res.json({
+          usdBrlRate,
+          timestamp: timeFormatted,
+          source: "Binance API (Tempo Real)",
+          items: results
+        });
+      }
+    }
+  } catch (err) {
+    console.warn("Binance fetch failed, falling back to CoinGecko / fallback:", err);
+  }
+
+  // Fallback attempt: CoinGecko API
+  try {
+    const ids = commoditiesList.map(c => c.geckoid).join(",");
+    const cgUrl = `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd,brl&include_24hr_change=true&include_24hr_vol=true`;
+    const cgRes = await fetch(cgUrl);
+    if (cgRes.ok) {
+      const cgData = await cgRes.json();
+      const results = commoditiesList.map(item => {
+        const coin = cgData[item.geckoid] || {};
+        const priceUsd = coin.usd || 0;
+        const priceBrl = coin.brl || (priceUsd * usdBrlRate);
+        const change24h = coin.usd_24h_change || 0;
+        const volume24hUsd = coin.usd_24h_vol || 0;
+
+        return {
+          symbol: item.symbol,
+          name: item.name,
+          category: item.category,
+          priceUsd,
+          priceBrl,
+          change24h,
+          high24hUsd: priceUsd * 1.03,
+          low24hUsd: priceUsd * 0.97,
+          volume24hUsd
+        };
+      });
+
+      return res.json({
+        usdBrlRate,
+        timestamp: timeFormatted,
+        source: "CoinGecko API",
+        items: results
+      });
+    }
+  } catch (err) {
+    console.warn("CoinGecko fallback failed:", err);
+  }
+
+  // Baseline fallback values if external crypto APIs are temporarily blocked
+  const fallbackPricesUsd: Record<string, { price: number; change: number }> = {
+    BTC: { price: 95450, change: 2.15 },
+    ETH: { price: 2680, change: 1.84 },
+    SOL: { price: 198.50, change: 4.12 },
+    XRP: { price: 2.45, change: -0.85 },
+    ADA: { price: 0.82, change: 1.05 },
+    DOGE: { price: 0.26, change: 3.40 },
+    SHIB: { price: 0.0000245, change: 1.20 },
+    AVAX: { price: 34.20, change: 0.95 },
+    LINK: { price: 18.60, change: 2.30 },
+    DOT: { price: 7.85, change: -1.10 },
+    LTC: { price: 112.40, change: 0.50 },
+    BCH: { price: 445.00, change: 1.75 },
+    XLM: { price: 0.38, change: -0.40 },
+    HBAR: { price: 0.22, change: 5.80 },
+    XTZ: { price: 1.15, change: 0.20 },
+    APT: { price: 9.80, change: 3.10 }
+  };
+
+  const fallbackResults = commoditiesList.map(item => {
+    const base = fallbackPricesUsd[item.symbol] || { price: 10, change: 0 };
+    const priceUsd = base.price;
+    return {
+      symbol: item.symbol,
+      name: item.name,
+      category: item.category,
+      priceUsd,
+      priceBrl: priceUsd * usdBrlRate,
+      change24h: base.change,
+      high24hUsd: priceUsd * 1.025,
+      low24hUsd: priceUsd * 0.975,
+      volume24hUsd: priceUsd * 500000
+    };
+  });
+
+  return res.json({
+    usdBrlRate,
+    timestamp: timeFormatted,
+    source: "Estimativa Mercado",
+    items: fallbackResults
+  });
+});
+
+// 7. API: Real-Time & Historical Kline Chart Endpoint for Digital Commodities
+app.get("/api/crypto-chart", async (req, res) => {
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+
+  const symbol = ((req.query.symbol as string) || "BTC").toUpperCase();
+  const period = (req.query.period as string) || "1d"; // 1m, 1d, 1w, 1M, 1y
+  const pair = `${symbol}USDT`;
+  const targetUsd = req.query.currentPriceUsd ? parseFloat(req.query.currentPriceUsd as string) : 0;
+
+  // Determine Binance interval & limit based on period
+  let interval = "1h";
+  let limit = 24;
+  let dateFormatOptions: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit" };
+
+  if (period === "1m") {
+    interval = "1m";
+    limit = 60; // 60 minutes
+    dateFormatOptions = { hour: "2-digit", minute: "2-digit", second: "2-digit" };
+  } else if (period === "1d") {
+    interval = "1h";
+    limit = 24; // 24 hours
+    dateFormatOptions = { hour: "2-digit", minute: "2-digit" };
+  } else if (period === "1w") {
+    interval = "4h";
+    limit = 42; // 7 days * 6
+    dateFormatOptions = { weekday: "short", hour: "2-digit" };
+  } else if (period === "1M") {
+    interval = "1d";
+    limit = 30; // 30 days
+    dateFormatOptions = { day: "2-digit", month: "short" };
+  } else if (period === "1y") {
+    interval = "1w";
+    limit = 52; // 52 weeks
+    dateFormatOptions = { month: "short", year: "2-digit" };
+  }
+
+  // Live USD/BRL rate
+  let usdBrlRate = 5.65;
+  try {
+    const usdRes = await fetch(`https://economia.awesomeapi.com.br/json/last/USD-BRL?t=${Date.now()}`);
+    if (usdRes.ok) {
+      const usdData = await usdRes.json();
+      if (usdData && usdData.USDBRL) {
+        usdBrlRate = parseFloat(usdData.USDBRL.bid) || 5.65;
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  try {
+    const binanceUrl = `https://api.binance.com/api/v3/klines?symbol=${pair}&interval=${interval}&limit=${limit}`;
+    const bRes = await fetch(binanceUrl, { headers: { "Cache-Control": "no-cache" } });
+    if (bRes.ok) {
+      const klines = await bRes.json();
+      if (Array.isArray(klines) && klines.length > 0) {
+        const points = klines.map((k: any) => {
+          const openTime = k[0];
+          const closePrice = parseFloat(k[4]);
+          const dateObj = new Date(openTime);
+          const timeLabel = dateObj.toLocaleDateString("pt-BR", dateFormatOptions);
+
+          return {
+            timestamp: openTime,
+            timeLabel: period === "1m" || period === "1d" ? dateObj.toLocaleTimeString("pt-BR", dateFormatOptions) : timeLabel,
+            priceUsd: closePrice,
+            priceBrl: closePrice * usdBrlRate,
+            highUsd: parseFloat(k[2]),
+            lowUsd: parseFloat(k[3]),
+            volumeUsd: parseFloat(k[7]) || 0
+          };
+        });
+
+        // Scale points so final point matches targetUsd if provided
+        if (targetUsd > 0 && points.length > 0) {
+          const lastClose = points[points.length - 1].priceUsd;
+          if (lastClose > 0) {
+            const scale = targetUsd / lastClose;
+            points.forEach((p: any) => {
+              p.priceUsd = p.priceUsd * scale;
+              p.priceBrl = p.priceUsd * usdBrlRate;
+              p.highUsd = p.highUsd * scale;
+              p.lowUsd = p.lowUsd * scale;
+            });
+          }
+        }
+
+        return res.json({
+          symbol,
+          period,
+          usdBrlRate,
+          source: "Binance Klines",
+          data: points
+        });
+      }
+    }
+  } catch (err) {
+    console.warn(`Binance chart fetch failed for ${pair}:`, err);
+  }
+
+  // Fallback synthetic series if Binance API is unreachable
+  const nowMs = Date.now();
+  const points = [];
+  let basePrice = targetUsd > 0 ? targetUsd : 1000;
+  if (!targetUsd) {
+    if (symbol === "BTC") basePrice = 95450;
+    if (symbol === "ETH") basePrice = 2680;
+    if (symbol === "SOL") basePrice = 198.5;
+    if (symbol === "XRP") basePrice = 2.45;
+    if (symbol === "ADA") basePrice = 0.82;
+    if (symbol === "DOGE") basePrice = 0.26;
+    if (symbol === "SHIB") basePrice = 0.0000245;
+  }
+
+  // Generate backwards from targetUsd so final point is targetUsd
+  const rawPoints = [];
+  let currentP = basePrice;
+  for (let i = 0; i < limit; i++) {
+    rawPoints.push(currentP);
+    const variation = (Math.random() - 0.48) * 0.02 * currentP;
+    currentP = Math.max(0.000001, currentP - variation);
+  }
+  rawPoints.reverse(); // Now index limit-1 is targetUsd
+
+  const stepMs = (period === "1m" ? 60000 : period === "1d" ? 3600000 : period === "1w" ? 14400000 : period === "1M" ? 86400000 : 604800000);
+
+  for (let i = limit - 1; i >= 0; i--) {
+    const tMs = nowMs - (i * stepMs);
+    const dateObj = new Date(tMs);
+    const val = rawPoints[limit - 1 - i];
+
+    points.push({
+      timestamp: tMs,
+      timeLabel: period === "1m" || period === "1d" ? dateObj.toLocaleTimeString("pt-BR", dateFormatOptions) : dateObj.toLocaleDateString("pt-BR", dateFormatOptions),
+      priceUsd: val,
+      priceBrl: val * usdBrlRate,
+      highUsd: val * 1.01,
+      lowUsd: val * 0.99,
+      volumeUsd: val * 1000
+    });
+  }
+
+  return res.json({
+    symbol,
+    period,
+    usdBrlRate,
+    source: "Simulado",
+    data: points
+  });
+});
+
 // Serve frontend with Vite in dev, static files in production
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
