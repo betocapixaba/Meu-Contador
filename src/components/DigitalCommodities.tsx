@@ -16,12 +16,17 @@ import {
   X,
   LineChart as LineChartIcon,
   Maximize2,
-  Calendar
+  Calendar,
+  GitCompare,
+  Layers,
+  Percent
 } from "lucide-react";
 import {
   ResponsiveContainer,
   AreaChart,
   Area,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   Tooltip,
@@ -68,9 +73,12 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
 
   // Chart Modal state
   const [selectedCoin, setSelectedCoin] = useState<CommodityItem | null>(null);
+  const [compareCoin, setCompareCoin] = useState<CommodityItem | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>("1d");
   const [chartData, setChartData] = useState<ChartPoint[]>([]);
+  const [compareChartData, setCompareChartData] = useState<ChartPoint[]>([]);
   const [loadingChart, setLoadingChart] = useState(false);
+  const [comparisonMode, setComparisonMode] = useState<"percentage" | "absolute">("percentage");
 
   const fetchCommoditiesData = async () => {
     setLoading(true);
@@ -86,6 +94,12 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
           setSourceInfo(data.source || "Tempo Real");
 
           setSelectedCoin(prev => {
+            if (!prev) return null;
+            const match = data.items.find((i: CommodityItem) => i.symbol === prev.symbol);
+            return match || prev;
+          });
+
+          setCompareCoin(prev => {
             if (!prev) return null;
             const match = data.items.find((i: CommodityItem) => i.symbol === prev.symbol);
             return match || prev;
@@ -134,8 +148,7 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
     }
   };
 
-  const fetchChartData = async (coin: CommodityItem, period: PeriodType) => {
-    setLoadingChart(true);
+  const getChartPointsForCoin = async (coin: CommodityItem, period: PeriodType): Promise<ChartPoint[]> => {
     const targetUsd = coin.priceUsd;
     const targetBrl = coin.priceBrl;
     const conversionRatio = targetUsd > 0 && targetBrl > 0 ? targetBrl / targetUsd : usdBrlRate;
@@ -145,22 +158,11 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
       if (res.ok) {
         const data = await res.json();
         if (data && Array.isArray(data.data) && data.data.length > 0) {
-          let pts: ChartPoint[] = data.data;
-          const lastIdx = pts.length - 1;
-
-          pts = pts.map((p, idx) => {
-            const pUsd = idx === lastIdx && targetUsd > 0 ? targetUsd : p.priceUsd;
-            const pBrl = idx === lastIdx && targetBrl > 0 ? targetBrl : pUsd * conversionRatio;
-            return {
-              ...p,
-              priceUsd: pUsd,
-              priceBrl: pBrl
-            };
-          });
-
-          setChartData(pts);
-          setLoadingChart(false);
-          return;
+          return data.data.map((p: ChartPoint) => ({
+            ...p,
+            priceUsd: p.priceUsd,
+            priceBrl: p.priceUsd * conversionRatio
+          }));
         }
       }
     } catch (e) {
@@ -199,8 +201,23 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
       });
     }
 
-    setChartData(pts);
-    setLoadingChart(false);
+    return pts;
+  };
+
+  const fetchAllChartData = async (primary: CommodityItem, secondary: CommodityItem | null, period: PeriodType) => {
+    setLoadingChart(true);
+    try {
+      const p1Promise = getChartPointsForCoin(primary, period);
+      const p2Promise = secondary ? getChartPointsForCoin(secondary, period) : Promise.resolve([]);
+
+      const [pts1, pts2] = await Promise.all([p1Promise, p2Promise]);
+      setChartData(pts1);
+      setCompareChartData(pts2);
+    } catch (e) {
+      console.warn("Error fetching comparison chart data:", e);
+    } finally {
+      setLoadingChart(false);
+    }
   };
 
   useEffect(() => {
@@ -220,9 +237,9 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
 
   useEffect(() => {
     if (selectedCoin) {
-      fetchChartData(selectedCoin, selectedPeriod);
+      fetchAllChartData(selectedCoin, compareCoin, selectedPeriod);
     }
-  }, [selectedCoin?.symbol, selectedCoin?.priceUsd, selectedPeriod]);
+  }, [selectedCoin?.symbol, selectedCoin?.priceUsd, compareCoin?.symbol, compareCoin?.priceUsd, selectedPeriod]);
 
   // Format currency helper
   const formatPrice = (value: number, currency: "BRL" | "USD") => {
@@ -293,13 +310,23 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
   // Top gainers/losers
   const topGainer = items.length > 0 ? [...items].sort((a, b) => b.change24h - a.change24h)[0] : null;
 
-  // Calculate stats for current chart
-  const firstPoint = chartData.length > 0 ? chartData[0] : null;
-  const lastPoint = chartData.length > 0 ? chartData[chartData.length - 1] : null;
-  const periodValFirst = firstPoint ? (displayCurrency === "BRL" ? firstPoint.priceBrl : firstPoint.priceUsd) : 0;
-  const periodValLast = lastPoint ? (displayCurrency === "BRL" ? lastPoint.priceBrl : lastPoint.priceUsd) : 0;
-  const periodChangePct = periodValFirst > 0 ? ((periodValLast - periodValFirst) / periodValFirst) * 100 : 0;
-  const isPeriodPositive = periodChangePct >= 0;
+  // Calculate stats for current primary chart & secondary compare chart
+  const firstPoint1 = chartData.length > 0 ? chartData[0] : null;
+  const lastPoint1 = chartData.length > 0 ? chartData[chartData.length - 1] : null;
+  const periodValFirst1 = firstPoint1 ? (displayCurrency === "BRL" ? firstPoint1.priceBrl : firstPoint1.priceUsd) : 0;
+  const periodValLast1 = lastPoint1 ? (displayCurrency === "BRL" ? lastPoint1.priceBrl : lastPoint1.priceUsd) : 0;
+  const periodChangePct1 = periodValFirst1 > 0 ? ((periodValLast1 - periodValFirst1) / periodValFirst1) * 100 : 0;
+  const isPeriodPositive = periodChangePct1 >= 0;
+
+  let periodChangePct2 = 0;
+  if (compareChartData.length > 0) {
+    const firstPoint2 = compareChartData[0];
+    const lastPoint2 = compareChartData[compareChartData.length - 1];
+    const periodValFirst2 = firstPoint2 ? (displayCurrency === "BRL" ? firstPoint2.priceBrl : firstPoint2.priceUsd) : 0;
+    const periodValLast2 = lastPoint2 ? (displayCurrency === "BRL" ? lastPoint2.priceBrl : lastPoint2.priceUsd) : 0;
+    periodChangePct2 = periodValFirst2 > 0 ? ((periodValLast2 - periodValFirst2) / periodValFirst2) * 100 : 0;
+  }
+  const spreadPct = periodChangePct1 - periodChangePct2;
 
   const minChartVal = chartData.length > 0 
     ? Math.min(...chartData.map(d => displayCurrency === "BRL" ? d.priceBrl : d.priceUsd))
@@ -307,6 +334,36 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
   const maxChartVal = chartData.length > 0 
     ? Math.max(...chartData.map(d => displayCurrency === "BRL" ? d.priceBrl : d.priceUsd))
     : 0;
+
+  // Combined data structure for overlay chart rendering
+  const startVal1 = periodValFirst1;
+  const startVal2 = compareChartData.length > 0 ? (displayCurrency === "BRL" ? compareChartData[0].priceBrl : compareChartData[0].priceUsd) : 0;
+
+  const combinedChartData = chartData.map((p1, idx) => {
+    const p2 = compareChartData[idx];
+    const val1 = displayCurrency === "BRL" ? p1.priceBrl : p1.priceUsd;
+    const pct1 = startVal1 > 0 ? ((val1 - startVal1) / startVal1) * 100 : 0;
+
+    let val2 = 0;
+    let pct2 = 0;
+    if (p2 && compareChartData.length > 0) {
+      val2 = displayCurrency === "BRL" ? p2.priceBrl : p2.priceUsd;
+      pct2 = startVal2 > 0 ? ((val2 - startVal2) / startVal2) * 100 : 0;
+    }
+
+    return {
+      timestamp: p1.timestamp,
+      timeLabel: p1.timeLabel,
+      priceUsd1: p1.priceUsd,
+      priceBrl1: p1.priceBrl,
+      val1,
+      pct1,
+      priceUsd2: p2 ? p2.priceUsd : 0,
+      priceBrl2: p2 ? p2.priceBrl : 0,
+      val2,
+      pct2
+    };
+  });
 
   return (
     <div className="space-y-5">
@@ -579,9 +636,9 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
                   {selectedCoin.symbol.substring(0, 3)}
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <h2 className="text-xl font-black tracking-tight">
-                      Gráfico de Movimentação - {selectedCoin.name} ({selectedCoin.symbol})
+                      {compareCoin ? `${selectedCoin.symbol} vs ${compareCoin.symbol} - Comparação` : `Gráfico de Movimentação - ${selectedCoin.name} (${selectedCoin.symbol})`}
                     </h2>
                   </div>
                   <div className="flex items-center gap-2 text-xs mt-0.5">
@@ -601,7 +658,10 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
 
               <button
                 id="close-crypto-chart-modal"
-                onClick={() => setSelectedCoin(null)}
+                onClick={() => {
+                  setSelectedCoin(null);
+                  setCompareCoin(null);
+                }}
                 className={`p-2 rounded-2xl border transition ${
                   darkMode 
                     ? "bg-slate-800 border-slate-700 text-slate-400 hover:text-white" 
@@ -613,7 +673,79 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
             </div>
 
             {/* Modal Body */}
-            <div className="p-6 space-y-6">
+            <div className="p-6 space-y-5">
+              {/* Comparison Control Bar */}
+              <div className={`p-3.5 rounded-2xl border flex flex-wrap items-center justify-between gap-3 ${
+                darkMode ? "bg-slate-800/60 border-slate-700" : "bg-purple-50/70 border-purple-100"
+              }`}>
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <span className="text-xs font-black flex items-center gap-1.5 text-purple-600 dark:text-purple-400">
+                    <GitCompare className="w-4 h-4" /> Comparar Criptomoedas:
+                  </span>
+
+                  {compareCoin ? (
+                    <div className="flex items-center gap-2 bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 px-3 py-1 rounded-xl text-xs font-bold font-mono">
+                      <span>vs 🟠 {compareCoin.name} ({compareCoin.symbol})</span>
+                      <button
+                        onClick={() => setCompareCoin(null)}
+                        className="ml-1 text-slate-400 hover:text-rose-500 transition"
+                        title="Remover comparação"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        const found = items.find(i => i.symbol === e.target.value);
+                        if (found) setCompareCoin(found);
+                      }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold border outline-none cursor-pointer transition ${
+                        darkMode ? "bg-slate-900 border-slate-700 text-slate-300 hover:border-purple-500" : "bg-white border-slate-300 text-slate-700 hover:border-purple-500"
+                      }`}
+                    >
+                      <option value="">+ Adicionar segunda moeda para sobreposição...</option>
+                      {items.filter(i => i.symbol !== selectedCoin.symbol).map(item => (
+                        <option key={item.symbol} value={item.symbol}>
+                          {item.name} ({item.symbol}) - {formatPrice(displayCurrency === "BRL" ? item.priceBrl : item.priceUsd, displayCurrency)}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                {compareCoin && (
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] uppercase font-bold ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
+                      Visualização:
+                    </span>
+                    <div className={`p-0.5 rounded-xl border flex items-center gap-0.5 text-[11px] font-bold ${
+                      darkMode ? "bg-slate-900 border-slate-700" : "bg-white border-slate-200"
+                    }`}>
+                      <button
+                        onClick={() => setComparisonMode("percentage")}
+                        className={`px-2.5 py-1 rounded-lg transition ${
+                          comparisonMode === "percentage" ? "bg-purple-600 text-white shadow-xs" : darkMode ? "text-slate-400" : "text-slate-600"
+                        }`}
+                        title="Comparação percentual normalizada indexada no início do período"
+                      >
+                        % Rentabilidade
+                      </button>
+                      <button
+                        onClick={() => setComparisonMode("absolute")}
+                        className={`px-2.5 py-1 rounded-lg transition ${
+                          comparisonMode === "absolute" ? "bg-purple-600 text-white shadow-xs" : darkMode ? "text-slate-400" : "text-slate-600"
+                        }`}
+                        title="Valores monetários de mercado"
+                      >
+                        Valores
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Timeframe Selector & Currency Switcher */}
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className={`p-1 rounded-2xl border flex items-center gap-1 ${
@@ -662,45 +794,85 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
               </div>
 
               {/* Period Stats summary bar */}
-              <div className={`grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 rounded-2xl border ${
-                darkMode ? "bg-slate-800/50 border-slate-800" : "bg-slate-50 border-slate-200/70"
-              }`}>
-                <div>
-                  <span className={`text-[10px] uppercase font-bold ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
-                    Mínima no Período
-                  </span>
-                  <p className="text-sm font-black font-mono mt-0.5">
-                    {formatPrice(minChartVal, displayCurrency)}
-                  </p>
+              {!compareCoin ? (
+                <div className={`grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 rounded-2xl border ${
+                  darkMode ? "bg-slate-800/50 border-slate-800" : "bg-slate-50 border-slate-200/70"
+                }`}>
+                  <div>
+                    <span className={`text-[10px] uppercase font-bold ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
+                      Mínima no Período
+                    </span>
+                    <p className="text-sm font-black font-mono mt-0.5">
+                      {formatPrice(minChartVal, displayCurrency)}
+                    </p>
+                  </div>
+                  <div>
+                    <span className={`text-[10px] uppercase font-bold ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
+                      Máxima no Período
+                    </span>
+                    <p className="text-sm font-black font-mono mt-0.5">
+                      {formatPrice(maxChartVal, displayCurrency)}
+                    </p>
+                  </div>
+                  <div>
+                    <span className={`text-[10px] uppercase font-bold ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
+                      Variação ({periodsList.find(p => p.id === selectedPeriod)?.label})
+                    </span>
+                    <p className={`text-sm font-black font-mono mt-0.5 flex items-center gap-1 ${
+                      isPeriodPositive ? "text-emerald-500" : "text-rose-500"
+                    }`}>
+                      {isPeriodPositive ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                      {isPeriodPositive ? `+${periodChangePct1.toFixed(2)}%` : `${periodChangePct1.toFixed(2)}%`}
+                    </p>
+                  </div>
+                  <div>
+                    <span className={`text-[10px] uppercase font-bold ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
+                      Módulo de Tempo
+                    </span>
+                    <p className="text-sm font-bold text-purple-600 dark:text-purple-400 mt-0.5">
+                      Spot Binance Klines
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <span className={`text-[10px] uppercase font-bold ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
-                    Máxima no Período
-                  </span>
-                  <p className="text-sm font-black font-mono mt-0.5">
-                    {formatPrice(maxChartVal, displayCurrency)}
-                  </p>
+              ) : (
+                /* Comparison Summary Stats */
+                <div className={`grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 rounded-2xl border ${
+                  darkMode ? "bg-slate-800/50 border-slate-800" : "bg-slate-50 border-slate-200/70"
+                }`}>
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-purple-500 shrink-0"></span>
+                    <div>
+                      <span className={`text-[10px] uppercase font-bold ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
+                        {selectedCoin.name} ({selectedCoin.symbol})
+                      </span>
+                      <p className={`text-sm font-black font-mono ${periodChangePct1 >= 0 ? "text-emerald-500" : "text-rose-500"}`}>
+                        {periodChangePct1 >= 0 ? `+${periodChangePct1.toFixed(2)}%` : `${periodChangePct1.toFixed(2)}%`}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-amber-500 shrink-0"></span>
+                    <div>
+                      <span className={`text-[10px] uppercase font-bold ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
+                        {compareCoin.name} ({compareCoin.symbol})
+                      </span>
+                      <p className={`text-sm font-black font-mono ${periodChangePct2 >= 0 ? "text-emerald-500" : "text-rose-500"}`}>
+                        {periodChangePct2 >= 0 ? `+${periodChangePct2.toFixed(2)}%` : `${periodChangePct2.toFixed(2)}%`}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className={`text-[10px] uppercase font-bold ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
+                      Spread de Performance
+                    </span>
+                    <p className={`text-sm font-black font-mono mt-0.5 ${spreadPct >= 0 ? "text-purple-500" : "text-amber-500"}`}>
+                      {spreadPct >= 0 ? `${selectedCoin.symbol} +${spreadPct.toFixed(2)}% vs ${compareCoin.symbol}` : `${compareCoin.symbol} +${Math.abs(spreadPct).toFixed(2)}% vs ${selectedCoin.symbol}`}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <span className={`text-[10px] uppercase font-bold ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
-                    Variação ({periodsList.find(p => p.id === selectedPeriod)?.label})
-                  </span>
-                  <p className={`text-sm font-black font-mono mt-0.5 flex items-center gap-1 ${
-                    isPeriodPositive ? "text-emerald-500" : "text-rose-500"
-                  }`}>
-                    {isPeriodPositive ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-                    {isPeriodPositive ? `+${periodChangePct.toFixed(2)}%` : `${periodChangePct.toFixed(2)}%`}
-                  </p>
-                </div>
-                <div>
-                  <span className={`text-[10px] uppercase font-bold ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
-                    Módulo de Tempo
-                  </span>
-                  <p className="text-sm font-bold text-purple-600 dark:text-purple-400 mt-0.5">
-                    Spot Binance Klines
-                  </p>
-                </div>
-              </div>
+              )}
 
               {/* Chart Visualizer */}
               <div className={`p-4 rounded-2xl border ${
@@ -710,7 +882,7 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
                   <div className="h-72 flex flex-col items-center justify-center">
                     <Sparkles className="w-8 h-8 text-purple-600 animate-spin mb-2" />
                     <p className={`text-xs font-semibold ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
-                      Carregando dados históricos do período ({periodsList.find(p => p.id === selectedPeriod)?.label})...
+                      Carregando e combinando histórico de cotações ({periodsList.find(p => p.id === selectedPeriod)?.label})...
                     </p>
                   </div>
                 ) : chartData.length === 0 ? (
@@ -720,62 +892,177 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
                 ) : (
                   <div className="h-80 w-full">
                     <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                        <defs>
-                          <linearGradient id="cryptoGradientPos" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.4}/>
-                            <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                          </linearGradient>
-                          <linearGradient id="cryptoGradientNeg" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.4}/>
-                            <stop offset="95%" stopColor="#f43f5e" stopOpacity={0}/>
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? "#334155" : "#e2e8f0"} vertical={false} />
-                        <XAxis 
-                          dataKey="timeLabel" 
-                          stroke={darkMode ? "#94a3b8" : "#64748b"} 
-                          fontSize={11} 
-                          tickLine={false}
-                          axisLine={false}
-                        />
-                        <YAxis 
-                          domain={['auto', 'auto']} 
-                          stroke={darkMode ? "#94a3b8" : "#64748b"} 
-                          fontSize={10} 
-                          orientation="right"
-                          tickFormatter={(v) => formatPrice(v, displayCurrency)}
-                          tickLine={false}
-                          axisLine={false}
-                        />
-                        <Tooltip 
-                          content={({ active, payload }) => {
-                            if (active && payload && payload.length) {
-                              const d = payload[0].payload as ChartPoint;
-                              const val = displayCurrency === "BRL" ? d.priceBrl : d.priceUsd;
-                              return (
-                                <div className={`p-3 rounded-xl border shadow-xl text-xs font-mono ${
-                                  darkMode ? "bg-slate-900 border-slate-700 text-white" : "bg-white border-slate-200 text-slate-900"
-                                }`}>
-                                  <p className="text-[10px] text-slate-400 mb-1">{d.timeLabel}</p>
-                                  <p className="text-sm font-black text-purple-500">
-                                    {formatPrice(val, displayCurrency)}
-                                  </p>
-                                </div>
-                              );
-                            }
-                            return null;
-                          }}
-                        />
-                        <Area 
-                          type="monotone" 
-                          dataKey={displayCurrency === "BRL" ? "priceBrl" : "priceUsd"} 
-                          stroke={isPeriodPositive ? "#10b981" : "#f43f5e"} 
-                          strokeWidth={2.5}
-                          fillOpacity={1} 
-                          fill={isPeriodPositive ? "url(#cryptoGradientPos)" : "url(#cryptoGradientNeg)"} 
-                        />
-                      </AreaChart>
+                      {!compareCoin ? (
+                        <AreaChart data={combinedChartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                          <defs>
+                            <linearGradient id="cryptoGradientPos" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#10b981" stopOpacity={0.4}/>
+                              <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                            </linearGradient>
+                            <linearGradient id="cryptoGradientNeg" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.4}/>
+                              <stop offset="95%" stopColor="#f43f5e" stopOpacity={0}/>
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? "#334155" : "#e2e8f0"} vertical={false} />
+                          <XAxis 
+                            dataKey="timeLabel" 
+                            stroke={darkMode ? "#94a3b8" : "#64748b"} 
+                            fontSize={11} 
+                            tickLine={false}
+                            axisLine={false}
+                          />
+                          <YAxis 
+                            domain={['auto', 'auto']} 
+                            stroke={darkMode ? "#94a3b8" : "#64748b"} 
+                            fontSize={10} 
+                            orientation="right"
+                            tickFormatter={(v) => formatPrice(v, displayCurrency)}
+                            tickLine={false}
+                            axisLine={false}
+                          />
+                          <Tooltip 
+                            content={({ active, payload }) => {
+                              if (active && payload && payload.length) {
+                                const d = payload[0].payload;
+                                return (
+                                  <div className={`p-3 rounded-xl border shadow-xl text-xs font-mono ${
+                                    darkMode ? "bg-slate-900 border-slate-700 text-white" : "bg-white border-slate-200 text-slate-900"
+                                  }`}>
+                                    <p className="text-[10px] text-slate-400 mb-1">{d.timeLabel}</p>
+                                    <p className="text-sm font-black text-purple-500">
+                                      {formatPrice(d.val1, displayCurrency)}
+                                    </p>
+                                    <p className={`text-[10px] mt-0.5 font-bold ${d.pct1 >= 0 ? "text-emerald-500" : "text-rose-500"}`}>
+                                      {d.pct1 >= 0 ? `+${d.pct1.toFixed(2)}%` : `${d.pct1.toFixed(2)}%`} no período
+                                    </p>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            }}
+                          />
+                          <Area 
+                            type="monotone" 
+                            dataKey="val1" 
+                            stroke={isPeriodPositive ? "#10b981" : "#f43f5e"} 
+                            strokeWidth={2.5}
+                            fillOpacity={1} 
+                            fill={isPeriodPositive ? "url(#cryptoGradientPos)" : "url(#cryptoGradientNeg)"} 
+                          />
+                        </AreaChart>
+                      ) : (
+                        /* Comparison Overlay Line Chart */
+                        <LineChart data={combinedChartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? "#334155" : "#e2e8f0"} vertical={false} />
+                          <XAxis 
+                            dataKey="timeLabel" 
+                            stroke={darkMode ? "#94a3b8" : "#64748b"} 
+                            fontSize={11} 
+                            tickLine={false}
+                            axisLine={false}
+                          />
+                          {comparisonMode === "percentage" ? (
+                            <YAxis 
+                              stroke={darkMode ? "#94a3b8" : "#64748b"} 
+                              fontSize={10} 
+                              orientation="right"
+                              tickFormatter={(v) => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`}
+                              tickLine={false}
+                              axisLine={false}
+                            />
+                          ) : (
+                            <>
+                              <YAxis 
+                                yAxisId="left"
+                                stroke="#a855f7" 
+                                fontSize={10} 
+                                orientation="left"
+                                tickFormatter={(v) => formatPrice(v, displayCurrency)}
+                                tickLine={false}
+                                axisLine={false}
+                              />
+                              <YAxis 
+                                yAxisId="right"
+                                stroke="#f59e0b" 
+                                fontSize={10} 
+                                orientation="right"
+                                tickFormatter={(v) => formatPrice(v, displayCurrency)}
+                                tickLine={false}
+                                axisLine={false}
+                              />
+                            </>
+                          )}
+                          <Tooltip 
+                            content={({ active, payload }) => {
+                              if (active && payload && payload.length) {
+                                const d = payload[0].payload;
+                                const diff = d.pct1 - d.pct2;
+                                return (
+                                  <div className={`p-3.5 rounded-2xl border shadow-2xl text-xs font-mono space-y-2 min-w-[220px] ${
+                                    darkMode ? "bg-slate-900 border-slate-700 text-white" : "bg-white border-slate-200 text-slate-900"
+                                  }`}>
+                                    <p className="text-[10px] text-slate-400 font-sans border-b pb-1 mb-1">{d.timeLabel}</p>
+                                    
+                                    <div className="flex items-center justify-between gap-3">
+                                      <span className="flex items-center gap-1.5 text-purple-400 font-bold">
+                                        <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+                                        {selectedCoin.symbol}:
+                                      </span>
+                                      <div className="text-right">
+                                        <span className="font-bold">{formatPrice(d.val1, displayCurrency)}</span>
+                                        <span className={`block text-[10px] font-bold ${d.pct1 >= 0 ? "text-emerald-500" : "text-rose-500"}`}>
+                                          {d.pct1 >= 0 ? `+${d.pct1.toFixed(2)}%` : `${d.pct1.toFixed(2)}%`}
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    <div className="flex items-center justify-between gap-3 border-t pt-1.5">
+                                      <span className="flex items-center gap-1.5 text-amber-500 font-bold">
+                                        <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                                        {compareCoin.symbol}:
+                                      </span>
+                                      <div className="text-right">
+                                        <span className="font-bold">{formatPrice(d.val2, displayCurrency)}</span>
+                                        <span className={`block text-[10px] font-bold ${d.pct2 >= 0 ? "text-emerald-500" : "text-rose-500"}`}>
+                                          {d.pct2 >= 0 ? `+${d.pct2.toFixed(2)}%` : `${d.pct2.toFixed(2)}%`}
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    <div className="border-t pt-1.5 text-[10px] font-sans flex items-center justify-between text-slate-400">
+                                      <span>Diferença:</span>
+                                      <span className={`font-bold font-mono ${diff >= 0 ? "text-purple-400" : "text-amber-400"}`}>
+                                        {diff >= 0 ? `+${diff.toFixed(2)}% (${selectedCoin.symbol})` : `+${Math.abs(diff).toFixed(2)}% (${compareCoin.symbol})`}
+                                      </span>
+                                    </div>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            }}
+                          />
+                          <Line 
+                            type="monotone" 
+                            dataKey={comparisonMode === "percentage" ? "pct1" : "val1"} 
+                            yAxisId={comparisonMode === "percentage" ? undefined : "left"}
+                            name={selectedCoin.symbol}
+                            stroke="#a855f7" 
+                            strokeWidth={3}
+                            dot={false}
+                          />
+                          <Line 
+                            type="monotone" 
+                            dataKey={comparisonMode === "percentage" ? "pct2" : "val2"} 
+                            yAxisId={comparisonMode === "percentage" ? undefined : "right"}
+                            name={compareCoin.symbol}
+                            stroke="#f59e0b" 
+                            strokeWidth={2.5}
+                            strokeDasharray={comparisonMode === "absolute" ? "4 4" : undefined}
+                            dot={false}
+                          />
+                        </LineChart>
+                      )}
                     </ResponsiveContainer>
                   </div>
                 )}

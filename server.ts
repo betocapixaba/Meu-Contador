@@ -899,16 +899,14 @@ app.get("/api/crypto-chart", async (req, res) => {
     if (bRes.ok) {
       const klines = await bRes.json();
       if (Array.isArray(klines) && klines.length > 0) {
+        const lastBinanceClose = parseFloat(klines[klines.length - 1][4]);
+        const scale = (targetUsd > 0 && lastBinanceClose > 0) ? (targetUsd / lastBinanceClose) : 1;
+
         const points = klines.map((k: any, idx: number) => {
           const openTime = k[0];
-          // For the very first candle (idx 0), use openPrice (k[1]) so it starts exactly 24h/1w/1M ago
-          // For subsequent candles, use closePrice (k[4])
-          let pUsd = idx === 0 ? parseFloat(k[1]) : parseFloat(k[4]);
-
-          // For the last candle, if targetUsd is provided, use targetUsd as the live current price
-          if (idx === klines.length - 1 && targetUsd > 0) {
-            pUsd = targetUsd;
-          }
+          // For idx 0 (start of timeframe), use open price (k[1]); for subsequent candles, use close price (k[4])
+          const rawPrice = idx === 0 ? parseFloat(k[1]) : parseFloat(k[4]);
+          const pUsd = rawPrice * scale;
 
           const dateObj = new Date(openTime);
           const timeLabel = period === "1m" || period === "1d" 
@@ -920,8 +918,8 @@ app.get("/api/crypto-chart", async (req, res) => {
             timeLabel,
             priceUsd: pUsd,
             priceBrl: pUsd * usdBrlRate,
-            highUsd: parseFloat(k[2]),
-            lowUsd: parseFloat(k[3]),
+            highUsd: parseFloat(k[2]) * scale,
+            lowUsd: parseFloat(k[3]) * scale,
             volumeUsd: parseFloat(k[7]) || 0
           };
         });
