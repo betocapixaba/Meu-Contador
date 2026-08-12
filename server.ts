@@ -854,28 +854,28 @@ app.get("/api/crypto-chart", async (req, res) => {
 
   // Determine Binance interval & limit based on period
   let interval = "1h";
-  let limit = 24;
+  let limit = 25;
   let dateFormatOptions: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit" };
 
   if (period === "1m") {
     interval = "1m";
-    limit = 60; // 60 minutes
-    dateFormatOptions = { hour: "2-digit", minute: "2-digit", second: "2-digit" };
+    limit = 30; // 30 minutes window
+    dateFormatOptions = { hour: "2-digit", minute: "2-digit" };
   } else if (period === "1d") {
     interval = "1h";
-    limit = 24; // 24 hours
+    limit = 25; // 25 points = 24 hours (point 0 is 24h ago open price)
     dateFormatOptions = { hour: "2-digit", minute: "2-digit" };
   } else if (period === "1w") {
     interval = "4h";
-    limit = 42; // 7 days * 6
+    limit = 43; // 42 * 4h = 7 days
     dateFormatOptions = { weekday: "short", hour: "2-digit" };
   } else if (period === "1M") {
     interval = "1d";
-    limit = 30; // 30 days
+    limit = 31; // 30 days
     dateFormatOptions = { day: "2-digit", month: "short" };
   } else if (period === "1y") {
     interval = "1w";
-    limit = 52; // 52 weeks
+    limit = 53; // 52 weeks
     dateFormatOptions = { month: "short", year: "2-digit" };
   }
 
@@ -899,36 +899,32 @@ app.get("/api/crypto-chart", async (req, res) => {
     if (bRes.ok) {
       const klines = await bRes.json();
       if (Array.isArray(klines) && klines.length > 0) {
-        const points = klines.map((k: any) => {
+        const points = klines.map((k: any, idx: number) => {
           const openTime = k[0];
-          const closePrice = parseFloat(k[4]);
+          // For the very first candle (idx 0), use openPrice (k[1]) so it starts exactly 24h/1w/1M ago
+          // For subsequent candles, use closePrice (k[4])
+          let pUsd = idx === 0 ? parseFloat(k[1]) : parseFloat(k[4]);
+
+          // For the last candle, if targetUsd is provided, use targetUsd as the live current price
+          if (idx === klines.length - 1 && targetUsd > 0) {
+            pUsd = targetUsd;
+          }
+
           const dateObj = new Date(openTime);
-          const timeLabel = dateObj.toLocaleDateString("pt-BR", dateFormatOptions);
+          const timeLabel = period === "1m" || period === "1d" 
+            ? dateObj.toLocaleTimeString("pt-BR", dateFormatOptions) 
+            : dateObj.toLocaleDateString("pt-BR", dateFormatOptions);
 
           return {
             timestamp: openTime,
-            timeLabel: period === "1m" || period === "1d" ? dateObj.toLocaleTimeString("pt-BR", dateFormatOptions) : timeLabel,
-            priceUsd: closePrice,
-            priceBrl: closePrice * usdBrlRate,
+            timeLabel,
+            priceUsd: pUsd,
+            priceBrl: pUsd * usdBrlRate,
             highUsd: parseFloat(k[2]),
             lowUsd: parseFloat(k[3]),
             volumeUsd: parseFloat(k[7]) || 0
           };
         });
-
-        // Scale points so final point matches targetUsd if provided
-        if (targetUsd > 0 && points.length > 0) {
-          const lastClose = points[points.length - 1].priceUsd;
-          if (lastClose > 0) {
-            const scale = targetUsd / lastClose;
-            points.forEach((p: any) => {
-              p.priceUsd = p.priceUsd * scale;
-              p.priceBrl = p.priceUsd * usdBrlRate;
-              p.highUsd = p.highUsd * scale;
-              p.lowUsd = p.lowUsd * scale;
-            });
-          }
-        }
 
         return res.json({
           symbol,
@@ -957,7 +953,6 @@ app.get("/api/crypto-chart", async (req, res) => {
     if (symbol === "SHIB") basePrice = 0.0000245;
   }
 
-  // Generate backwards from targetUsd so final point is targetUsd
   const rawPoints = [];
   let currentP = basePrice;
   for (let i = 0; i < limit; i++) {

@@ -138,6 +138,7 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
     setLoadingChart(true);
     const targetUsd = coin.priceUsd;
     const targetBrl = coin.priceBrl;
+    const conversionRatio = targetUsd > 0 && targetBrl > 0 ? targetBrl / targetUsd : usdBrlRate;
 
     try {
       const res = await fetch(`/api/crypto-chart?symbol=${encodeURIComponent(coin.symbol)}&period=${period}&currentPriceUsd=${targetUsd}&t=${Date.now()}`);
@@ -146,26 +147,17 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
         if (data && Array.isArray(data.data) && data.data.length > 0) {
           let pts: ChartPoint[] = data.data;
           const lastIdx = pts.length - 1;
-          const lastPrice = pts[lastIdx].priceUsd;
-          if (lastPrice > 0 && targetUsd > 0) {
-            const scale = targetUsd / lastPrice;
-            pts = pts.map((p, idx) => {
-              if (idx === lastIdx) {
-                return {
-                  ...p,
-                  priceUsd: targetUsd,
-                  priceBrl: targetBrl
-                };
-              }
-              return {
-                ...p,
-                priceUsd: p.priceUsd * scale,
-                priceBrl: targetBrl > 0 ? (p.priceUsd * scale) * (targetBrl / targetUsd) : (p.priceUsd * scale) * usdBrlRate,
-                highUsd: p.highUsd * scale,
-                lowUsd: p.lowUsd * scale
-              };
-            });
-          }
+
+          pts = pts.map((p, idx) => {
+            const pUsd = idx === lastIdx && targetUsd > 0 ? targetUsd : p.priceUsd;
+            const pBrl = idx === lastIdx && targetBrl > 0 ? targetBrl : pUsd * conversionRatio;
+            return {
+              ...p,
+              priceUsd: pUsd,
+              priceBrl: pBrl
+            };
+          });
+
           setChartData(pts);
           setLoadingChart(false);
           return;
