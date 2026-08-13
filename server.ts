@@ -851,6 +851,7 @@ app.get("/api/crypto-chart", async (req, res) => {
   const period = (req.query.period as string) || "1d"; // 1m, 1d, 1w, 1M, 1y
   const pair = `${symbol}USDT`;
   const targetUsd = req.query.currentPriceUsd ? parseFloat(req.query.currentPriceUsd as string) : 0;
+  const change24hParam = req.query.change24h ? parseFloat(req.query.change24h as string) : null;
 
   // Determine Binance interval & limit based on period
   let interval = "1h";
@@ -902,9 +903,8 @@ app.get("/api/crypto-chart", async (req, res) => {
         const lastBinanceClose = parseFloat(klines[klines.length - 1][4]);
         const scale = (targetUsd > 0 && lastBinanceClose > 0) ? (targetUsd / lastBinanceClose) : 1;
 
-        const points = klines.map((k: any, idx: number) => {
+        const rawPoints = klines.map((k: any, idx: number) => {
           const openTime = k[0];
-          // For idx 0 (start of timeframe), use open price (k[1]); for subsequent candles, use close price (k[4])
           const rawPrice = idx === 0 ? parseFloat(k[1]) : parseFloat(k[4]);
           const pUsd = rawPrice * scale;
 
@@ -924,12 +924,34 @@ app.get("/api/crypto-chart", async (req, res) => {
           };
         });
 
+        // Anchor last point to exact targetUsd if provided
+        if (targetUsd > 0 && rawPoints.length > 0) {
+          const lastIdx = rawPoints.length - 1;
+          rawPoints[lastIdx].priceUsd = targetUsd;
+          rawPoints[lastIdx].priceBrl = targetUsd * usdBrlRate;
+        }
+
+        // For 1d period, linearly detrend so point 0 matches exact 24h change percentage if provided
+        if (period === "1d" && change24hParam !== null && targetUsd > 0 && rawPoints.length > 1) {
+          const expectedStartUsd = targetUsd / (1 + (change24hParam / 100));
+          const currentStartUsd = rawPoints[0].priceUsd;
+          const deltaStart = expectedStartUsd - currentStartUsd;
+          const totalPoints = rawPoints.length - 1;
+
+          for (let i = 0; i < rawPoints.length; i++) {
+            const weight = (totalPoints - i) / totalPoints; // 1 at i=0, 0 at i=last
+            const adjustedUsd = rawPoints[i].priceUsd + (deltaStart * weight);
+            rawPoints[i].priceUsd = adjustedUsd;
+            rawPoints[i].priceBrl = adjustedUsd * usdBrlRate;
+          }
+        }
+
         return res.json({
           symbol,
           period,
           usdBrlRate,
           source: "Binance Klines",
-          data: points
+          data: rawPoints
         });
       }
     }
@@ -951,21 +973,37 @@ app.get("/api/crypto-chart", async (req, res) => {
     if (symbol === "SHIB") basePrice = 0.0000245;
   }
 
-  const rawPoints = [];
+  const rawPricesUsd: number[] = [];
   let currentP = basePrice;
   for (let i = 0; i < limit; i++) {
-    rawPoints.push(currentP);
+    rawPricesUsd.push(currentP);
     const variation = (Math.random() - 0.48) * 0.02 * currentP;
     currentP = Math.max(0.000001, currentP - variation);
   }
-  rawPoints.reverse(); // Now index limit-1 is targetUsd
+  rawPricesUsd.reverse(); // Now index limit-1 is basePrice (targetUsd)
+
+  // Force last point = basePrice
+  rawPricesUsd[limit - 1] = basePrice;
+
+  // For 1d, adjust start point to match change24h
+  if (period === "1d" && change24hParam !== null && basePrice > 0 && limit > 1) {
+    const expectedStartUsd = basePrice / (1 + (change24hParam / 100));
+    const currentStartUsd = rawPricesUsd[0];
+    const deltaStart = expectedStartUsd - currentStartUsd;
+    const totalP = limit - 1;
+
+    for (let i = 0; i < limit; i++) {
+      const weight = (totalP - i) / totalP;
+      rawPricesUsd[i] = rawPricesUsd[i] + (deltaStart * weight);
+    }
+  }
 
   const stepMs = (period === "1m" ? 60000 : period === "1d" ? 3600000 : period === "1w" ? 14400000 : period === "1M" ? 86400000 : 604800000);
 
   for (let i = limit - 1; i >= 0; i--) {
     const tMs = nowMs - (i * stepMs);
     const dateObj = new Date(tMs);
-    const val = rawPoints[limit - 1 - i];
+    const val = rawPricesUsd[limit - 1 - i];
 
     points.push({
       timestamp: tMs,

@@ -154,15 +154,31 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
     const conversionRatio = targetUsd > 0 && targetBrl > 0 ? targetBrl / targetUsd : usdBrlRate;
 
     try {
-      const res = await fetch(`/api/crypto-chart?symbol=${encodeURIComponent(coin.symbol)}&period=${period}&currentPriceUsd=${targetUsd}&t=${Date.now()}`);
+      const res = await fetch(`/api/crypto-chart?symbol=${encodeURIComponent(coin.symbol)}&period=${period}&currentPriceUsd=${targetUsd}&change24h=${coin.change24h}&t=${Date.now()}`);
       if (res.ok) {
         const data = await res.json();
         if (data && Array.isArray(data.data) && data.data.length > 0) {
-          return data.data.map((p: ChartPoint) => ({
+          const rawPts: ChartPoint[] = data.data.map((p: ChartPoint) => ({
             ...p,
             priceUsd: p.priceUsd,
             priceBrl: p.priceUsd * conversionRatio
           }));
+
+          // Strict guarantee: Force last point of chart to match current coin price exactly
+          if (rawPts.length > 0 && targetUsd > 0) {
+            const lastIdx = rawPts.length - 1;
+            rawPts[lastIdx].priceUsd = targetUsd;
+            rawPts[lastIdx].priceBrl = targetBrl > 0 ? targetBrl : targetUsd * conversionRatio;
+          }
+
+          // For 1d period, guarantee first point matches exact 24h change
+          if (period === "1d" && rawPts.length > 1 && coin.change24h !== undefined && targetUsd > 0) {
+            const expectedStartUsd = targetUsd / (1 + (coin.change24h / 100));
+            rawPts[0].priceUsd = expectedStartUsd;
+            rawPts[0].priceBrl = expectedStartUsd * conversionRatio;
+          }
+
+          return rawPts;
         }
       }
     } catch (e) {
@@ -184,11 +200,26 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
     }
     pricesUsd.reverse();
 
+    // Force last point = targetUsd
+    pricesUsd[count - 1] = targetUsd;
+
+    if (period === "1d" && coin.change24h !== undefined && targetUsd > 0 && count > 1) {
+      const expectedStartUsd = targetUsd / (1 + (coin.change24h / 100));
+      const currentStartUsd = pricesUsd[0];
+      const deltaStart = expectedStartUsd - currentStartUsd;
+      const totalP = count - 1;
+
+      for (let i = 0; i < count; i++) {
+        const weight = (totalP - i) / totalP;
+        pricesUsd[i] = pricesUsd[i] + (deltaStart * weight);
+      }
+    }
+
     for (let i = count - 1; i >= 0; i--) {
       const tMs = nowMs - (i * stepMs);
       const dateObj = new Date(tMs);
       const curUsd = pricesUsd[count - 1 - i];
-      const curBrl = targetBrl > 0 && targetUsd > 0 ? curUsd * (targetBrl / targetUsd) : curUsd * usdBrlRate;
+      const curBrl = curUsd * conversionRatio;
 
       pts.push({
         timestamp: tMs,
