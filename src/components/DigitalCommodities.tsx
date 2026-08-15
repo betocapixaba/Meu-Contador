@@ -73,6 +73,7 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
   const [wsConnected, setWsConnected] = useState<boolean>(false);
   const [liveTicksCount, setLiveTicksCount] = useState<number>(0);
   const [priceDirections, setPriceDirections] = useState<Record<string, "up" | "down">>({});
+  const [showRefreshFeedback, setShowRefreshFeedback] = useState<boolean>(false);
 
   // Chart Modal state
   const [selectedCoin, setSelectedCoin] = useState<CommodityItem | null>(null);
@@ -103,6 +104,9 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
   };
 
   const fetchCommoditiesData = async () => {
+    setLoading(true);
+    const minDelay = new Promise(resolve => setTimeout(resolve, 600));
+
     try {
       // 1. Try backend server endpoint
       const res = await fetch(`/api/crypto-rates?t=${Date.now()}`);
@@ -111,7 +115,8 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
         if (data && Array.isArray(data.items) && data.items.length > 0) {
           setItems(data.items);
           if (data.usdBrlRate) setUsdBrlRate(data.usdBrlRate);
-          setLastUpdated(data.timestamp || new Date().toLocaleTimeString("pt-BR"));
+          const nowTime = data.timestamp || new Date().toLocaleTimeString("pt-BR");
+          setLastUpdated(nowTime);
           if (!wsConnected) {
             setSourceInfo(data.source || "Mercado Spot");
           }
@@ -128,7 +133,9 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
             return match || prev;
           });
 
-          setLoading(false);
+          setShowRefreshFeedback(true);
+          setTimeout(() => setShowRefreshFeedback(false), 2000);
+          await minDelay;
           return;
         }
       }
@@ -165,6 +172,9 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
 
       setItems(fallbackList);
       setLastUpdated(new Date().toLocaleTimeString("pt-BR"));
+      setShowRefreshFeedback(true);
+      setTimeout(() => setShowRefreshFeedback(false), 2000);
+      await minDelay;
     } finally {
       setLoading(false);
     }
@@ -616,13 +626,17 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
               disabled={loading}
               title="Atualizar Cotações"
               className={`p-2.5 rounded-xl border text-xs font-bold transition active:scale-95 flex items-center gap-1.5 ${
+                loading ? "opacity-75 cursor-wait" : ""
+              } ${
                 darkMode 
                   ? "bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700" 
                   : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50 shadow-xs"
               }`}
             >
               <RefreshCcw className={`w-4 h-4 ${loading ? "animate-spin text-purple-500" : ""}`} />
-              <span className="hidden sm:inline">Atualizar</span>
+              <span className="hidden sm:inline">
+                {loading ? "Atualizando..." : showRefreshFeedback ? "Atualizado!" : "Atualizar"}
+              </span>
             </button>
           </div>
         </div>
@@ -893,20 +907,46 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
                 </div>
               </div>
 
-              <button
-                id="close-crypto-chart-modal"
-                onClick={() => {
-                  setSelectedCoin(null);
-                  setCompareCoin(null);
-                }}
-                className={`p-2 rounded-2xl border transition ${
-                  darkMode 
-                    ? "bg-slate-800 border-slate-700 text-slate-400 hover:text-white" 
-                    : "bg-slate-100 border-slate-200 text-slate-500 hover:text-slate-900"
-                }`}
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  id="modal-refresh-crypto-rates-btn"
+                  onClick={() => {
+                    fetchCommoditiesData();
+                    if (selectedCoin) {
+                      fetchAllChartData(selectedCoin, compareCoin, selectedPeriod);
+                    }
+                  }}
+                  disabled={loading || loadingChart}
+                  title="Atualizar dados e gráfico"
+                  className={`p-2 rounded-2xl border transition active:scale-95 flex items-center gap-1 text-xs font-bold ${
+                    loading || loadingChart ? "opacity-75 cursor-wait" : ""
+                  } ${
+                    darkMode 
+                      ? "bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-750" 
+                      : "bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200"
+                  }`}
+                >
+                  <RefreshCcw className={`w-4 h-4 ${(loading || loadingChart) ? "animate-spin text-purple-500" : ""}`} />
+                  <span className="hidden sm:inline">
+                    {loading || loadingChart ? "Atualizando..." : "Atualizar"}
+                  </span>
+                </button>
+
+                <button
+                  id="close-crypto-chart-modal"
+                  onClick={() => {
+                    setSelectedCoin(null);
+                    setCompareCoin(null);
+                  }}
+                  className={`p-2 rounded-2xl border transition ${
+                    darkMode 
+                      ? "bg-slate-800 border-slate-700 text-slate-400 hover:text-white" 
+                      : "bg-slate-100 border-slate-200 text-slate-500 hover:text-slate-900"
+                  }`}
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             {/* Modal Body */}
