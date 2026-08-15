@@ -29,6 +29,8 @@ import { db, auth } from "../firebase";
 import { isDemoActive, localAddDoc } from "../utils/demoDb";
 import { Currency, formatCurrency } from "../utils/currency";
 import { Transaction } from "../types";
+import { normalizeCategory } from "../utils/categories";
+import { parseFinancialAmount } from "../utils/amountParser";
 
 interface AiAgentProps {
   darkMode: boolean;
@@ -217,60 +219,8 @@ export default function AiAgent({ darkMode, onTransactionAdded, currency, transa
       }
     }
 
-    const numbers = lower.match(/(?:r\$\s*|\$\s*)?(\d+(?:\.\d{3})*(?:,\d{1,2})?|\d+(?:\.\d+)?)/gi);
-    // Helper: Convert Portuguese words to number
-    const wordValues: Record<string, number> = {
-      "cem": 100, "cento": 100, "duzentos": 200, "trezentos": 300, "quatrocentos": 400,
-      "quinhentos": 500, "seiscentos": 600, "setecentos": 700, "oitocentos": 800, "novecentos": 900,
-      "mil": 1000, "dois mil": 2000, "três mil": 3000, "tres mil": 3000, "quatro mil": 4000, "cinco mil": 5000, "dez mil": 10000,
-      "vinte": 20, "trinta": 30, "quarenta": 40, "cinquenta": 50, "sessenta": 60, "setenta": 70, "oitenta": 80, "noventa": 90,
-      "dez": 10, "onze": 11, "doze": 12, "treze": 13, "quatorze": 14, "quinze": 15, "dezesseis": 16, "dezessete": 17, "dezoito": 18, "dezenove": 19,
-      "um": 1, "dois": 2, "três": 3, "tres": 3, "quatro": 4, "cinco": 5, "seis": 6, "sete": 7, "oito": 8, "nove": 9
-    };
-
-    let amount = 0;
-    if (numbers) {
-      for (const numStr of numbers) {
-        let cleaned = numStr.replace(/r\$/gi, "").replace(/\$/gi, "").replace(/€/gi, "").replace(/£/gi, "").replace(/¥/gi, "").replace(/chf/gi, "").replace(/a\$/gi, "").replace(/c\$/gi, "").replace(/zł/gi, "").replace(/kr/gi, "").replace(/\s/g, "").trim();
-        if (cleaned.includes(",") && cleaned.includes(".")) {
-          cleaned = cleaned.replace(/\./g, "").replace(/,/g, ".");
-        } else if (cleaned.includes(",")) {
-          cleaned = cleaned.replace(/,/g, ".");
-        }
-        const val = parseFloat(cleaned);
-        if (!isNaN(val) && val > 0 && val !== new Date().getFullYear()) {
-          amount = val;
-          break;
-        }
-      }
-    }
-
-    if (amount === 0) {
-      for (const [w, val] of Object.entries(wordValues)) {
-        if (
-          lower.includes(w + " reais") || 
-          lower.includes(w + " contos") || 
-          lower.includes(w + " dólares") || 
-          lower.includes(w + " dolares") || 
-          lower.includes(w + " euros") || 
-          lower.includes(w + " libras") || 
-          lower.includes(w + " pesos") || 
-          lower.includes(w + " mangos") ||
-          lower.includes(w + " pratas")
-        ) {
-          amount = val;
-          break;
-        }
-      }
-    }
-
-    let category = type === "receita" ? "Serviços" : "Outros";
-    if (lower.includes("almoço") || lower.includes("jantar") || lower.includes("comer") || lower.includes("mercado") || lower.includes("padaria") || lower.includes("restaurante")) category = "Alimentação";
-    else if (lower.includes("uber") || lower.includes("gasolina") || lower.includes("ônibus") || lower.includes("onibus") || lower.includes("combustível") || lower.includes("taxi")) category = "Transporte";
-    else if (lower.includes("aluguel") || lower.includes("luz") || lower.includes("água") || lower.includes("agua") || lower.includes("internet")) category = "Moradia";
-    else if (lower.includes("salario") || lower.includes("salário")) category = "Salário";
-    else if (lower.includes("cinema") || lower.includes("festa") || lower.includes("bar")) category = "Lazer";
-    else if (lower.includes("farmacia") || lower.includes("farmácia") || lower.includes("médico") || lower.includes("medico")) category = "Saúde";
+    const amount = parseFinancialAmount(text);
+    const category = normalizeCategory(null, type, text);
 
     let client: string | null = null;
     if (type === "receita") {
@@ -392,12 +342,19 @@ export default function AiAgent({ darkMode, onTransactionAdded, currency, transa
         return;
       }
 
+      const finalType: "receita" | "despesa" = msg.parsedData.type === "receita" ? "receita" : "despesa";
+      const finalCategory = normalizeCategory(
+        msg.parsedData.category,
+        finalType,
+        msg.parsedData.description || msg.text
+      );
+
       const txData = {
         userId: currentUser.uid,
-        type: msg.parsedData.type,
+        type: finalType,
         amount: Number(msg.parsedData.amount) || 0,
         currency: currency?.code || "BRL",
-        category: msg.parsedData.category || "Outros",
+        category: finalCategory,
         location: msg.parsedData.location || null,
         client: msg.parsedData.client || null,
         description: msg.parsedData.description || "Lançamento via Agente de IA",

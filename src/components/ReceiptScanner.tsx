@@ -4,6 +4,7 @@ import { db, auth } from "../firebase";
 import { Camera, Upload, Check, AlertCircle, RefreshCw, X, FileText } from "lucide-react";
 import { isDemoActive, localAddDoc } from "../utils/demoDb";
 import { Currency, formatCurrency } from "../utils/currency";
+import { normalizeCategory } from "../utils/categories";
 
 interface ReceiptScannerProps {
   darkMode: boolean;
@@ -87,12 +88,13 @@ export default function ReceiptScanner({ darkMode, onTransactionAdded, onClose, 
       const currentUser = isDemo ? { uid: "local-demo-user" } : auth.currentUser;
       
       if (currentUser) {
+        const finalCategory = normalizeCategory(parsedData.category, "despesa", parsedData.description || parsedData.location);
         const transactionData = {
           userId: currentUser.uid,
           type: "despesa",
           amount: Number(parsedData.amount) || 0,
           currency: currency?.code || "BRL",
-          category: parsedData.category || "Compras",
+          category: finalCategory,
           location: parsedData.location || "Recibo Escaneado",
           client: null,
           description: parsedData.description || "Escaneamento de Recibo",

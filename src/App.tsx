@@ -21,7 +21,10 @@ import {
   Smartphone,
   Sun,
   Moon,
-  Coins
+  Coins,
+  Wifi,
+  WifiOff,
+  CloudOff
 } from "lucide-react";
 import Auth from "./components/Auth";
 import Dashboard from "./components/Dashboard";
@@ -43,6 +46,30 @@ export default function App() {
     const saved = localStorage.getItem("contador_ia_dark");
     return saved ? saved === "true" : false; // Default to light mode (modo dia)
   });
+
+  // Offline persistence and network status tracking
+  const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== "undefined" ? navigator.onLine : true);
+  const [hasPendingSync, setHasPendingSync] = useState(false);
+  const [isFromCache, setIsFromCache] = useState(false);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      setToast({ message: "Conexão restabelecida! Sincronizando com Firestore...", type: "success" });
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+      setToast({ message: "Você está offline. Suas transações serão salvas localmente e sincronizadas automaticamente.", type: "success" });
+    };
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
 
   const [activeTab, setActiveTab] = useState<string>("Início");
   
@@ -401,7 +428,7 @@ export default function App() {
     }
   };
 
-  // Realtime updates subscription for transactions
+  // Realtime updates subscription for transactions (with Firestore Offline Persistence metadata)
   useEffect(() => {
     if (!user) return;
     if (user.uid === "local-demo-user") return;
@@ -411,12 +438,15 @@ export default function App() {
       where("userId", "==", user.uid)
     );
 
-    const unsubscribe = onSnapshot(tQuery, (snapshot) => {
+    const unsubscribe = onSnapshot(tQuery, { includeMetadataChanges: true }, (snapshot) => {
       const tList = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       } as Transaction));
       
+      setHasPendingSync(snapshot.metadata.hasPendingWrites);
+      setIsFromCache(snapshot.metadata.fromCache);
+
       // Sort client-side by createdAt desc (fallback to date)
       tList.sort((a, b) => {
         const timeA = a.createdAt ? new Date(a.createdAt).getTime() : (a.date ? new Date(a.date).getTime() : 0);
@@ -431,7 +461,7 @@ export default function App() {
     return unsubscribe;
   }, [user]);
 
-  // Realtime goals subscription
+  // Realtime goals subscription (with offline persistence metadata)
   useEffect(() => {
     if (!user) return;
     if (user.uid === "local-demo-user") return;
@@ -441,18 +471,20 @@ export default function App() {
       where("userId", "==", user.uid)
     );
 
-    const unsubscribe = onSnapshot(gQuery, (snapshot) => {
+    const unsubscribe = onSnapshot(gQuery, { includeMetadataChanges: true }, (snapshot) => {
       const gList = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       } as Goal));
       setGoals(gList);
+    }, (error) => {
+      console.error("Error in goals onSnapshot:", error);
     });
 
     return unsubscribe;
   }, [user]);
 
-  // Realtime recurrentExpenses subscription
+  // Realtime recurrentExpenses subscription (with offline persistence metadata)
   useEffect(() => {
     if (!user) return;
     if (user.uid === "local-demo-user") return;
@@ -462,12 +494,14 @@ export default function App() {
       where("userId", "==", user.uid)
     );
 
-    const unsubscribe = onSnapshot(rQuery, (snapshot) => {
+    const unsubscribe = onSnapshot(rQuery, { includeMetadataChanges: true }, (snapshot) => {
       const rList = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       } as RecurrentExpense));
       setRecurrentExpenses(rList);
+    }, (error) => {
+      console.error("Error in recurrentExpenses onSnapshot:", error);
     });
 
     return unsubscribe;
@@ -747,6 +781,44 @@ export default function App() {
             </button>
           </div>
         </header>
+
+        {/* Offline / Auto-Sync Status Bar (Firestore Persistence) */}
+        {(!isOnline || hasPendingSync) && (
+          <div className={`px-4 py-2 flex items-center justify-between text-xs transition-all shrink-0 border-b ${
+            !isOnline
+              ? darkMode
+                ? "bg-amber-950/60 border-amber-800/60 text-amber-300"
+                : "bg-amber-50 border-amber-200 text-amber-900"
+              : darkMode
+                ? "bg-indigo-950/60 border-indigo-800/60 text-indigo-300"
+                : "bg-indigo-50 border-indigo-200 text-indigo-900"
+          }`}>
+            <div className="flex items-center gap-2">
+              {!isOnline ? (
+                <>
+                  <WifiOff className="w-4 h-4 shrink-0 text-amber-500 animate-pulse" />
+                  <span className="text-[11px] font-medium leading-tight">
+                    <strong>Modo Offline:</strong> Transações salvas no dispositivo. Sincronização automática com Firestore ao reconectar.
+                  </span>
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-4 h-4 shrink-0 text-indigo-500 animate-spin" />
+                  <span className="text-[11px] font-medium leading-tight">
+                    Sincronizando transações pendentes com Cloud Firestore...
+                  </span>
+                </>
+              )}
+            </div>
+            <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded-md shrink-0 uppercase tracking-wider ${
+              !isOnline
+                ? darkMode ? "bg-amber-500/20 text-amber-400" : "bg-amber-200/60 text-amber-900"
+                : darkMode ? "bg-indigo-500/20 text-indigo-400" : "bg-indigo-200/60 text-indigo-900"
+            }`}>
+              {!isOnline ? "Offline" : "Sincronizando"}
+            </span>
+          </div>
+        )}
 
         {/* Quick Top Sub-Navigation Pills */}
         <div className={`px-4 py-2 border-b flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0 ${

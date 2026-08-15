@@ -33,37 +33,506 @@ function getAiClient(): GoogleGenAI {
   return aiClient;
 }
 
-// Helper: Convert Portuguese words to number if spoken text used written numbers
-function parsePortugueseWordsToNumber(text: string): number {
-  const words = text.toLowerCase();
-  
-  // Direct common words
-  const wordValues: Record<string, number> = {
-    "cem": 100, "cento": 100, "duzentos": 200, "trezentos": 300, "quatrocentos": 400,
-    "quinhentos": 500, "seiscentos": 600, "setecentos": 700, "oitocentos": 800, "novecentos": 900,
-    "mil": 1000, "dois mil": 2000, "três mil": 3000, "tres mil": 3000, "quatro mil": 4000, "cinco mil": 5000, "dez mil": 10000,
-    "vinte": 20, "trinta": 30, "quarenta": 40, "cinquenta": 50, "sessenta": 60, "setenta": 70, "oitenta": 80, "noventa": 90,
-    "dez": 10, "onze": 11, "doze": 12, "treze": 13, "quatorze": 14, "catorze": 14, "quinze": 15, "dezesseis": 16, "dezessete": 17, "dezoito": 18, "dezenove": 19,
-    "um": 1, "dois": 2, "três": 3, "tres": 3, "quatro": 4, "cinco": 5, "seis": 6, "sete": 7, "oito": 8, "nove": 9
-  };
+// Helper: Convert clean number string handling both international and Brazilian punctuation
+function parseCleanNumberString(rawNum: string): number {
+  if (!rawNum) return 0;
+  let str = rawNum.replace(/\s+/g, "").trim();
 
-  for (const [w, val] of Object.entries(wordValues)) {
-    if (
-      words.includes(w + " reais") || 
-      words.includes(w + " contos") || 
-      words.includes(w + " dólares") || 
-      words.includes(w + " dolares") || 
-      words.includes(w + " euros") || 
-      words.includes(w + " libras") || 
-      words.includes(w + " pesos") || 
-      words.includes(w + " mangos") ||
-      words.includes(w + " pratas")
-    ) {
+  if (str.includes(".") && str.includes(",")) {
+    const lastDot = str.lastIndexOf(".");
+    const lastComma = str.lastIndexOf(",");
+    if (lastComma > lastDot) {
+      str = str.replace(/\./g, "").replace(",", ".");
+    } else {
+      str = str.replace(/,/g, "");
+    }
+  } else if (str.includes(",")) {
+    const parts = str.split(",");
+    if (parts.length === 2 && parts[1].length <= 2) {
+      str = str.replace(",", ".");
+    } else {
+      str = str.replace(/,/g, "");
+    }
+  } else if (str.includes(".")) {
+    const parts = str.split(".");
+    if (parts.length === 2 && parts[1].length <= 2) {
+      // Decimal dot: e.g. 10.00 -> 10.00
+    } else if (parts.length === 2 && parts[1].length === 3) {
+      // Thousands: e.g. 1.000 -> 1000
+      str = str.replace(/\./g, "");
+    } else {
+      str = str.replace(/\./g, "");
+    }
+  }
+
+  const result = parseFloat(str);
+  return isNaN(result) ? 0 : result;
+}
+
+// Helper: Convert Portuguese words to number if spoken text used written numbers
+function parseSpokenPortugueseNumber(lowerText: string): number {
+  const spokenMap: [RegExp, number][] = [
+    [/\bdez\s+mil\b/i, 10000],
+    [/\bcinco\s+mil\b/i, 5000],
+    [/\bquatro\s+mil\b/i, 4000],
+    [/\btr[eê]s\s+mil\b/i, 3000],
+    [/\bdois\s+mil\b/i, 2000],
+    [/\bum\s+mil\b/i, 1000],
+    [/\bmil\b/i, 1000],
+    [/\bnovecentos\b/i, 900],
+    [/\boitocentos\b/i, 800],
+    [/\bsetecentos\b/i, 700],
+    [/\bseiscentos\b/i, 600],
+    [/\bquinhentos\b/i, 500],
+    [/\bquatrocentos\b/i, 400],
+    [/\btrezentos\b/i, 300],
+    [/\bduzentos\b/i, 200],
+    [/\bcem\b/i, 100],
+    [/\bcento\b/i, 100],
+    [/\bnoventa\b/i, 90],
+    [/\boitenta\b/i, 80],
+    [/\bsetenta\b/i, 70],
+    [/\bsessenta\b/i, 60],
+    [/\bcinquenta\b/i, 50],
+    [/\bquarenta\b/i, 40],
+    [/\btrinta\b/i, 30],
+    [/\bvinte\b/i, 20],
+    [/\bdezenove\b/i, 19],
+    [/\bdezoito\b/i, 18],
+    [/\bdezessete\b/i, 17],
+    [/\bdezesseis\b/i, 16],
+    [/\bquinze\b/i, 15],
+    [/\bquatorze\b|\bcatorze\b/i, 14],
+    [/\btreze\b/i, 13],
+    [/\bdoze\b/i, 12],
+    [/\bonze\b/i, 11],
+    [/\bdez\b/i, 10],
+    [/\bnove\b/i, 9],
+    [/\boito\b/i, 8],
+    [/\bsete\b/i, 7],
+    [/\bseis\b/i, 6],
+    [/\bcinco\b/i, 5],
+    [/\bquatro\b/i, 4],
+    [/\btr[eê]s\b/i, 3],
+    [/\bdois\b|\bduas\b/i, 2],
+    [/\bum\s+(?:dólar|dolar|real|euro|peso|conto|mango|prata)\b/i, 1],
+    [/\buma\s+(?:libra|prata)\b/i, 1]
+  ];
+
+  for (const [regex, val] of spokenMap) {
+    if (regex.test(lowerText)) {
       return val;
     }
   }
 
   return 0;
+}
+
+// Helper: Master amount extraction from any command text or transcript
+function parseFinancialAmount(rawText: string): number {
+  if (!rawText) return 0;
+  const text = rawText.trim();
+  const lower = text.toLowerCase();
+
+  // 1. Explicit currency symbol + number: e.g. "$10.00", "$ 10.00", "R$ 10,00", "€ 50.00"
+  const currencySymbolRegex = /(?:r\$\s*|\$\s*|€\s*|£\s*|¥\s*|chf\s*|a\$\s*|c\$\s*|zł\s*|kr\s*)([0-9]+(?:[.,][0-9]+)*)/i;
+  const symbolMatch = text.match(currencySymbolRegex);
+  if (symbolMatch && symbolMatch[1]) {
+    const val = parseCleanNumberString(symbolMatch[1]);
+    if (val > 0) return val;
+  }
+
+  // 2. Number + currency word: e.g. "10 dólares", "10 dolares", "10 reais", "10.00 dólares", "10,00 reais"
+  const currencyWordRegex = /\b([0-9]+(?:[.,][0-9]+)*)\s*(?:reais|real|dólares|dolares|dólar|dolar|euros|euro|libras|libra|pesos|peso|bucks|mangos|pratas|contos)\b/i;
+  const wordMatch = text.match(currencyWordRegex);
+  if (wordMatch && wordMatch[1]) {
+    const val = parseCleanNumberString(wordMatch[1]);
+    if (val > 0) return val;
+  }
+
+  // 3. Spoken Portuguese words
+  const spokenWordAmount = parseSpokenPortugueseNumber(lower);
+  if (spokenWordAmount > 0) {
+    return spokenWordAmount;
+  }
+
+  // 4. Any numeric digit sequences in the string
+  const anyNumberMatches = text.match(/\b([0-9]+(?:[.,][0-9]+)*)\b/g);
+  if (anyNumberMatches) {
+    const currentYear = new Date().getFullYear();
+    for (const numStr of anyNumberMatches) {
+      const val = parseCleanNumberString(numStr);
+      if (val > 0 && val !== currentYear) {
+        return val;
+      }
+    }
+  }
+
+  return 0;
+}
+
+// Helper: Strictly classify and normalize category for receipts, voice and text commands
+function normalizeServerTransactionCategory(
+  rawCategory: string | null | undefined,
+  type: "receita" | "despesa",
+  rawText?: string
+): string {
+  const combined = `${rawCategory || ""} ${rawText || ""}`.toLowerCase().trim();
+
+  if (type === "receita") {
+    // 1. Salário
+    if (
+      combined.includes("salario") ||
+      combined.includes("salário") ||
+      combined.includes("holerite") ||
+      combined.includes("contracheque") ||
+      combined.includes("adiantamento salarial") ||
+      combined.includes("décimo terceiro") ||
+      combined.includes("13º") ||
+      combined.includes("pró-labore") ||
+      combined.includes("pro-labore") ||
+      combined.includes("folha") ||
+      combined.includes("bônus da empresa")
+    ) {
+      return "Salário";
+    }
+
+    // 2. Vendas
+    if (
+      combined.includes("venda") ||
+      combined.includes("vendi") ||
+      combined.includes("faturamento") ||
+      combined.includes("faturei") ||
+      combined.includes("mercadoria") ||
+      combined.includes("produto") ||
+      combined.includes("comércio") ||
+      combined.includes("comercio") ||
+      combined.includes("lojinha") ||
+      combined.includes("bazar") ||
+      combined.includes("desapego") ||
+      combined.includes("loja") ||
+      combined.includes("revenda") ||
+      combined.includes("e-commerce") ||
+      combined.includes("ecommerce")
+    ) {
+      return "Vendas";
+    }
+
+    // 3. Investimentos
+    if (
+      combined.includes("investimento") ||
+      combined.includes("investimentos") ||
+      combined.includes("dividendo") ||
+      combined.includes("dividendos") ||
+      combined.includes("rendimento") ||
+      combined.includes("juros") ||
+      combined.includes("cdb") ||
+      combined.includes("ações") ||
+      combined.includes("acoes") ||
+      combined.includes("bolsa") ||
+      combined.includes("cripto") ||
+      combined.includes("bitcoin") ||
+      combined.includes("fii") ||
+      combined.includes("poupança") ||
+      combined.includes("poupanca") ||
+      combined.includes("tesouro") ||
+      combined.includes("aplicação") ||
+      combined.includes("aplicacao")
+    ) {
+      return "Investimentos";
+    }
+
+    // 4. Serviços
+    if (
+      combined.includes("serviço") ||
+      combined.includes("servico") ||
+      combined.includes("serviços") ||
+      combined.includes("servicos") ||
+      combined.includes("consultoria") ||
+      combined.includes("freela") ||
+      combined.includes("freelance") ||
+      combined.includes("diária") ||
+      combined.includes("diaria") ||
+      combined.includes("faxina") ||
+      combined.includes("diarista") ||
+      combined.includes("conserto") ||
+      combined.includes("manutenção") ||
+      combined.includes("manutencao") ||
+      combined.includes("reforma") ||
+      combined.includes("instalação") ||
+      combined.includes("instalacao") ||
+      combined.includes("mão de obra") ||
+      combined.includes("mao de obra") ||
+      combined.includes("projeto") ||
+      combined.includes("aula") ||
+      combined.includes("mentoria") ||
+      combined.includes("atendimento") ||
+      combined.includes("honorários") ||
+      combined.includes("honorarios") ||
+      combined.includes("comissão") ||
+      combined.includes("comissao")
+    ) {
+      return "Serviços";
+    }
+
+    const validIncomes = ["Salário", "Serviços", "Vendas", "Investimentos", "Outros"];
+    const match = validIncomes.find(c => c.toLowerCase() === (rawCategory || "").trim().toLowerCase());
+    if (match) return match;
+
+    return "Serviços";
+  }
+
+  // DESPESAS
+  // 1. Alimentação
+  if (
+    combined.includes("alimenta") ||
+    combined.includes("almoço") ||
+    combined.includes("almoco") ||
+    combined.includes("jantar") ||
+    combined.includes("janta") ||
+    combined.includes("comer") ||
+    combined.includes("comida") ||
+    combined.includes("restaurante") ||
+    combined.includes("mercado") ||
+    combined.includes("supermercado") ||
+    combined.includes("padaria") ||
+    combined.includes("padoca") ||
+    combined.includes("café") ||
+    combined.includes("cafe") ||
+    combined.includes("cafezinho") ||
+    combined.includes("lanche") ||
+    combined.includes("lanchonete") ||
+    combined.includes("ifood") ||
+    combined.includes("rappi") ||
+    combined.includes("delivery") ||
+    combined.includes("pizza") ||
+    combined.includes("pizzaria") ||
+    combined.includes("hamburguer") ||
+    combined.includes("mcdonalds") ||
+    combined.includes("bk") ||
+    combined.includes("burger") ||
+    combined.includes("dunkin") ||
+    combined.includes("churrasco") ||
+    combined.includes("açougue") ||
+    combined.includes("acougue") ||
+    combined.includes("feira") ||
+    combined.includes("hortifruti") ||
+    combined.includes("sorvete") ||
+    combined.includes("doces") ||
+    combined.includes("salgados")
+  ) {
+    return "Alimentação";
+  }
+
+  // 2. Transporte
+  if (
+    combined.includes("transporte") ||
+    combined.includes("uber") ||
+    combined.includes("99") ||
+    combined.includes("taxi") ||
+    combined.includes("táxi") ||
+    combined.includes("gasolina") ||
+    combined.includes("combustível") ||
+    combined.includes("combustivel") ||
+    combined.includes("etanol") ||
+    combined.includes("diesel") ||
+    combined.includes("abastecer") ||
+    combined.includes("posto") ||
+    combined.includes("onibus") ||
+    combined.includes("ônibus") ||
+    combined.includes("metro") ||
+    combined.includes("metrô") ||
+    combined.includes("passagem") ||
+    combined.includes("pedagio") ||
+    combined.includes("pedágio") ||
+    combined.includes("estacionamento") ||
+    combined.includes("estacionar") ||
+    combined.includes("mecanico") ||
+    combined.includes("mecânico") ||
+    combined.includes("oficina") ||
+    combined.includes("pneu") ||
+    combined.includes("troca de óleo") ||
+    combined.includes("troca de oleo") ||
+    combined.includes("ipva") ||
+    combined.includes("seguro auto") ||
+    combined.includes("sem parar") ||
+    combined.includes("veloe") ||
+    combined.includes("carro") ||
+    combined.includes("moto")
+  ) {
+    return "Transporte";
+  }
+
+  // 3. Moradia
+  if (
+    combined.includes("moradia") ||
+    combined.includes("aluguel") ||
+    combined.includes("luz") ||
+    combined.includes("energia") ||
+    combined.includes("enel") ||
+    combined.includes("cpfl") ||
+    combined.includes("cemig") ||
+    combined.includes("agua") ||
+    combined.includes("água") ||
+    combined.includes("sabesp") ||
+    combined.includes("sanepar") ||
+    combined.includes("internet") ||
+    combined.includes("wifi") ||
+    combined.includes("claro") ||
+    combined.includes("vivo") ||
+    combined.includes("tim") ||
+    combined.includes("condominio") ||
+    combined.includes("condomínio") ||
+    combined.includes("gás") ||
+    combined.includes("gas") ||
+    combined.includes("iptu") ||
+    combined.includes("reforma da casa") ||
+    combined.includes("faxineira") ||
+    combined.includes("diarista da casa") ||
+    combined.includes("eletrodoméstico") ||
+    combined.includes("eletrodomestico") ||
+    combined.includes("móveis") ||
+    combined.includes("moveis")
+  ) {
+    return "Moradia";
+  }
+
+  // 4. Lazer
+  if (
+    combined.includes("lazer") ||
+    combined.includes("cinema") ||
+    combined.includes("show") ||
+    combined.includes("teatro") ||
+    combined.includes("balada") ||
+    combined.includes("festa") ||
+    combined.includes("bar") ||
+    combined.includes("barzinho") ||
+    combined.includes("cerveja") ||
+    combined.includes("chopp") ||
+    combined.includes("bebida") ||
+    combined.includes("boteco") ||
+    combined.includes("viagem") ||
+    combined.includes("viajar") ||
+    combined.includes("hotel") ||
+    combined.includes("pousada") ||
+    combined.includes("passagem aérea") ||
+    combined.includes("airbnb") ||
+    combined.includes("streaming") ||
+    combined.includes("netflix") ||
+    combined.includes("spotify") ||
+    combined.includes("amazon prime") ||
+    combined.includes("hbo") ||
+    combined.includes("disney") ||
+    combined.includes("game") ||
+    combined.includes("games") ||
+    combined.includes("jogo") ||
+    combined.includes("jogos") ||
+    combined.includes("videogame") ||
+    combined.includes("playstation") ||
+    combined.includes("xbox") ||
+    combined.includes("steam") ||
+    combined.includes("praia") ||
+    combined.includes("passeio") ||
+    combined.includes("clube") ||
+    combined.includes("parque") ||
+    combined.includes("ingresso") ||
+    combined.includes("rolê") ||
+    combined.includes("role")
+  ) {
+    return "Lazer";
+  }
+
+  // 5. Saúde
+  if (
+    combined.includes("saúde") ||
+    combined.includes("saude") ||
+    combined.includes("farmácia") ||
+    combined.includes("farmacia") ||
+    combined.includes("drogaria") ||
+    combined.includes("remédio") ||
+    combined.includes("remedio") ||
+    combined.includes("medicamento") ||
+    combined.includes("médico") ||
+    combined.includes("medico") ||
+    combined.includes("doutor") ||
+    combined.includes("consulta") ||
+    combined.includes("dentista") ||
+    combined.includes("odontologia") ||
+    combined.includes("psicólogo") ||
+    combined.includes("psicologo") ||
+    combined.includes("terapia") ||
+    combined.includes("hospital") ||
+    combined.includes("pronto socorro") ||
+    combined.includes("exame") ||
+    combined.includes("laboratório") ||
+    combined.includes("laboratorio") ||
+    combined.includes("plano de saúde") ||
+    combined.includes("plano de saude") ||
+    combined.includes("unimed") ||
+    combined.includes("bradesco saude") ||
+    combined.includes("óculos") ||
+    combined.includes("oculos") ||
+    combined.includes("ótica") ||
+    combined.includes("otica") ||
+    combined.includes("fisioterapia") ||
+    combined.includes("suplemento") ||
+    combined.includes("whey") ||
+    combined.includes("academia") ||
+    combined.includes("smartfit") ||
+    combined.includes("gympass") ||
+    combined.includes("totalpass")
+  ) {
+    return "Saúde";
+  }
+
+  // 6. Compras
+  if (
+    combined.includes("compra") ||
+    combined.includes("compras") ||
+    combined.includes("shopping") ||
+    combined.includes("roupa") ||
+    combined.includes("roupas") ||
+    combined.includes("vestuário") ||
+    combined.includes("vestuario") ||
+    combined.includes("sapato") ||
+    combined.includes("sapatos") ||
+    combined.includes("tênis") ||
+    combined.includes("tenis") ||
+    combined.includes("camisa") ||
+    combined.includes("calça") ||
+    combined.includes("calca") ||
+    combined.includes("vestido") ||
+    combined.includes("celular") ||
+    combined.includes("iphone") ||
+    combined.includes("computador") ||
+    combined.includes("notebook") ||
+    combined.includes("eletrônico") ||
+    combined.includes("eletronico") ||
+    combined.includes("presente") ||
+    combined.includes("perfume") ||
+    combined.includes("cosmético") ||
+    combined.includes("cosmetico") ||
+    combined.includes("maquiagem") ||
+    combined.includes("shopee") ||
+    combined.includes("shein") ||
+    combined.includes("mercado livre") ||
+    combined.includes("amazon") ||
+    combined.includes("aliexpress") ||
+    combined.includes("bolsa") ||
+    combined.includes("acessório") ||
+    combined.includes("acessorio") ||
+    combined.includes("ferramenta") ||
+    combined.includes("livro") ||
+    combined.includes("papelaria")
+  ) {
+    return "Compras";
+  }
+
+  const validExpenses = ["Alimentação", "Transporte", "Moradia", "Lazer", "Saúde", "Compras", "Outros"];
+  const match = validExpenses.find(c => c.toLowerCase() === (rawCategory || "").trim().toLowerCase());
+  if (match) return match;
+
+  return "Outros";
 }
 
 // Helper: Local dynamic parsing when Gemini is unavailable (Quota/Rate limit/No API Key)
@@ -106,29 +575,8 @@ function generateLocalFallbackCommandParse(text: string, referenceDate: string, 
   ];
   const hasTransactionKeyword = revenueKeywords.some(kw => lower.includes(kw)) || expenseKeywords.some(kw => lower.includes(kw));
 
-  // Regex to extract numeric values (supporting formats like: 1500, 1.500, 15,50, 15.50, R$ 50, $25, €30, £40, etc.)
-  const numbers = lower.match(/(?:r\$\s*|\$\s*|€\s*|£\s*|¥\s*|chf\s*|a\$\s*|c\$\s*|zł\s*|kr\s*)?(\d+(?:\.\d{3})*(?:,\d{1,2})?|\d+(?:\.\d+)?)/gi);
-  let amount = 0;
-  if (numbers) {
-    for (const numStr of numbers) {
-      let cleaned = numStr.replace(/r\$/gi, "").replace(/\$/gi, "").replace(/€/gi, "").replace(/£/gi, "").replace(/¥/gi, "").replace(/chf/gi, "").replace(/a\$/gi, "").replace(/c\$/gi, "").replace(/zł/gi, "").replace(/kr/gi, "").replace(/\s/g, "").trim();
-      if (cleaned.includes(",") && cleaned.includes(".")) {
-        cleaned = cleaned.replace(/\./g, "").replace(/,/g, ".");
-      } else if (cleaned.includes(",")) {
-        cleaned = cleaned.replace(/,/g, ".");
-      }
-      const val = parseFloat(cleaned);
-      if (!isNaN(val) && val > 0 && val !== year) {
-        amount = val;
-        break;
-      }
-    }
-  }
-
-  // If number not extracted from digits, try written Portuguese numbers
-  if (amount === 0) {
-    amount = parsePortugueseWordsToNumber(lower);
-  }
+  // Extract numeric financial amount using master parser
+  const amount = parseFinancialAmount(text);
 
   // If user is asking a conversational question or no transaction keyword or amount was given
   if (isQuestion || (!hasTransactionKeyword && amount === 0)) {
@@ -168,25 +616,7 @@ function generateLocalFallbackCommandParse(text: string, referenceDate: string, 
     }
   }
 
-  let category = type === "receita" ? "Serviços" : "Outros";
-  const catKeywords: Record<string, string[]> = {
-    "Alimentação": ["comer", "comida", "restaurante", "almoço", "almoco", "jantar", "café", "cafe", "bauru", "padaria", "dunkin", "alimentação", "alimentacao", "supermercado", "mercado", "lanche", "janta", "pizzaria", "pizza", "hamburguer", "lanchonete", "padoca", "padaria", "mcdonalds", "bk", "burger"],
-    "Transporte": ["uber", "onibus", "ônibus", "metro", "metrô", "táxi", "taxi", "combustivel", "combustível", "gasolina", "transporte", "passagem", "pedágio", "pedagio", "estacionamento", "carro", "moto", "99", "99pop"],
-    "Moradia": ["aluguel", "luz", "agua", "água", "energia", "internet", "condominio", "condomínio", "moradia", "gás", "gas", "reforma", "enxoval"],
-    "Salário": ["salario", "salário", "pagamento", "provento", "adiantamento", "holerite"],
-    "Serviços": ["conserto", "reforma", "instalação", "instalacao", "serviço", "servico", "manutenção", "manutencao", "limpeza", "diarista", "faxina", "consultoria", "freela", "freelance"],
-    "Lazer": ["cinema", "show", "festa", "viagem", "cerveja", "bar", "lazer", "balada", "jogo", "ingresso", "praia", "futebol", "role", "rolê", "teatro"],
-    "Saúde": ["farmacia", "farmácia", "médico", "medico", "remédio", "remedio", "hospital", "saúde", "saude", "dentista", "consulta", "exame", "clínica", "clinica", "drogaria"]
-  };
-
-  outerLoop: for (const [cat, keywords] of Object.entries(catKeywords)) {
-    for (const kw of keywords) {
-      if (lower.includes(kw)) {
-        category = cat;
-        break outerLoop;
-      }
-    }
-  }
+  const category = normalizeServerTransactionCategory(null, type, text);
 
   let location: string | null = null;
   if (lower.includes("uber")) location = "Uber";
@@ -226,7 +656,7 @@ function generateLocalFallbackCommandParse(text: string, referenceDate: string, 
     date: `${year}-${month}-${day}`,
     isRecurrent,
     confidence: 0.85,
-    reply: `Entendi! Identifiquei uma ${type === "receita" ? "ENTRADA (Receita)" : "SAÍDA (Despesa)"} de ${currSymbol} ${formattedAmount} (${category}).`
+    reply: `Entendi! Identifiquei uma ${type === "receita" ? "ENTRADA (Receita)" : "SAÍDA (Despesa)"} de ${currSymbol} ${formattedAmount} na categoria "${category}".`
   };
 }
 
@@ -248,20 +678,38 @@ app.post("/api/parse-command", async (req, res) => {
 A moeda oficial configurada e escolhida no perfil do usuário é: ${activeCurrency.name} (Símbolo: "${activeCurrency.symbol}", Código: "${activeCurrency.code}").
 Todas as transações, valores numéricos, respostas e confirmações DEVEM ser efetuadas de acordo com esta moeda selecionada (${activeCurrency.symbol}).
 
-Sua tarefa é analisar rigorosamente frases faladas ou digitadas em português (do Brasil ou internacional) sobre finanças e determinar com precisão a intenção do usuário:
+Sua tarefa é analisar rigorosamente frases faladas ou digitadas em português (do Brasil ou internacional) sobre finanças e determinar com precisão a intenção e a CATEGORIA EXATA do usuário:
 
-1. Se for para REGISTRAR ou LANÇAR uma transação financeira (ex: "Gastei 50 no almoço", "Recebi 1500 do cliente João", "Paguei 120 de conta de luz", "Pix de 200 da Maria", "Vendi um produto por 800", "Salário caiu 3500"):
+REGRAS DE CATEGORIAS OFICIAIS DO SISTEMA (Você DEVE selecionar EXATAMENTE UMA das opções abaixo):
+
+Se 'type' for "receita":
+- "Salário": Para salários de empresas, holerites, pró-labore, 13º, contracheques ou adiantamentos salariais.
+- "Serviços": Para consultorias, freelancers, faxinas/diaristas, consertos, mão de obra, projetos, aulas, mentorias, atendimentos, honorários profissionais.
+- "Vendas": Para vendas de produtos, mercadorias, comércio, bazares, desapegos, faturamento de loja ou e-commerce.
+- "Investimentos": Para dividendos, juros, rendimentos de aplicações, CDB, ações, fundos imobiliários, poupança, criptomoedas.
+- "Outros": Para presentes, doações, sorteios, restituição de imposto de renda ou outras receitas não listadas acima.
+
+Se 'type' for "despesa":
+- "Alimentação": Para compras de supermercado, mercado, feiras, açougues, padarias, almoços, jantares, lanches, cafés, restaurantes, iFood, delivery, bebidas de refeições, comidas em geral.
+- "Transporte": Para combustível (gasolina, etanol, diesel), abastecimento em postos, Uber, 99, táxis, passagens de ônibus/metrô, pedágios, estacionamentos, mecânicos, oficinas, manutenção de carros/motos, IPVA, seguro veicular.
+- "Moradia": Para aluguel, condomínio, conta de luz (energia), conta de água, gás de cozinha, internet/Wi-Fi, IPTU, reformas residenciais ou itens do lar.
+- "Lazer": Para cinemas, shows, teatro, festas, bares, cervejas/chopp, viagens, hotéis, passeios, praia, assinaturas de entretenimento (Netflix, Spotify, Prime, Disney, etc.), jogos, videogames, eventos.
+- "Saúde": Para farmácias, remédios/medicamentos, drogarias, consultas médicas, dentistas, psicólogos/terapia, exames, hospitais, planos de saúde, academias, fisioterapia, suplementos.
+- "Compras": Para compras de roupas, calçados/tênis, eletrônicos, celulares, computadores, móveis, maquiagem/perfumes, presentes, compras no shopping ou em lojas online (Mercado Livre, Shopee, Shein, Amazon).
+- "Outros": Para tarifas bancárias, anuidade de cartão, impostos/tributos diversos, multas, cartório ou despesas que não se encaixem acima.
+
+1. Se for para REGISTRAR ou LANÇAR uma transação financeira:
    - intent: "transaction"
-   - type: "receita" (para dinheiro que entra, ganhos, faturamentos, vendas, salários, depósitos recebidos) OU "despesa" (para gastos, compras, pagamentos, contas, saídas)
-   - amount: número decimal positivo correspondente ao valor na moeda ${activeCurrency.symbol} (ex: 50, 1500.50, 120)
-   - category: categoria mais apropriada (ex: "Alimentação", "Transporte", "Moradia", "Salário", "Serviços", "Lazer", "Saúde", "Compras", "Educação", "Investimentos", "Outros")
-   - location: estabelecimento/local (se mencionado, ex: "Dunkin", "Uber", "Mercado Extra") ou null
+   - type: "receita" (ganhos, entradas, vendas, salários) OU "despesa" (gastos, contas, pagamentos, saídas)
+   - amount: número decimal positivo correspondente EXATAMENTE ao valor na moeda ${activeCurrency.symbol}. ATENÇÃO RIGOROSA: Extraia o valor numérico com exatidão sem dividir ou subtrair ordens de grandeza. Ex: '$10.00', '10.00', '$10', '10 dólares' ou 'dez dólares' DEVE RETORNAR amount: 10 (NUNCA 1.00 ou 1). R$ 1500 = 1500. $ 45.50 = 45.5.
+   - category: O NOME EXATO da categoria oficial de acordo com a lista acima (ex: "Alimentação", "Transporte", "Moradia", "Salário", "Serviços", "Lazer", "Saúde", "Compras", "Investimentos", "Vendas", "Outros")
+   - location: estabelecimento/local (se mencionado, ex: "Dunkin", "Uber", "Posto Ipiranga", "Mercado Extra") ou null
    - client: nome do cliente ou pagador (se for receita, ex: "João", "Maria") ou null
-   - description: descrição concisa e profissional da transação
+   - description: descrição concisa e profissional da transação (ex: "Almoço no restaurante", "Combustível no posto", "Salário mensal")
    - date: data no formato "YYYY-MM-DD" baseada na data de referência (${referenceDate})
    - isRecurrent: boolean (true se for mensalidade, assinatura, aluguel, recorrente)
    - confidence: número de 0 a 1 (ex: 0.95)
-   - reply: frase amigável confirmando o lançamento sempre utilizando o símbolo da moeda "${activeCurrency.symbol}" (ex: "Entendi! Identifiquei uma ENTRADA (Receita) de ${activeCurrency.symbol} 1.500,00...")
+   - reply: frase amigável confirmando o lançamento com a categoria e moeda "${activeCurrency.symbol}" (ex: "Entendi! Identifiquei uma SAÍDA (Despesa) de ${activeCurrency.symbol} 10,00 na categoria Alimentação.")
 
 2. Se for uma PERGUNTA, CONVERSA ou SAUDAÇÃO (ex: "Olá", "Quanto gastei este mês?", "Como economizar?"):
    - intent: "chat"
@@ -295,11 +743,11 @@ Contexto de referência:
             },
             amount: {
               type: Type.NUMBER,
-              description: `Valor numérico extraído da transação na moeda ${activeCurrency.symbol}.`
+              description: `Valor numérico extraído da transação na moeda ${activeCurrency.symbol}. Ex: se o usuário disse $10.00 ou 10 reais, o valor DEVE ser 10.`
             },
             category: {
               type: Type.STRING,
-              description: "Categoria da transação."
+              description: "Categoria exata oficial da transação."
             },
             location: {
               type: Type.STRING,
@@ -339,6 +787,14 @@ Contexto de referência:
 
     try {
       const parsedData = JSON.parse(cleanJson);
+      if (parsedData.intent === "transaction" && parsedData.type) {
+        // Reconcile and guarantee exact amount matching
+        const explicitAmount = parseFinancialAmount(text || parsedData.transcript || parsedData.description);
+        if (explicitAmount > 0 && (!parsedData.amount || parsedData.amount === 0 || (parsedData.amount === 1 && (explicitAmount === 10 || explicitAmount === 100)))) {
+          parsedData.amount = explicitAmount;
+        }
+        parsedData.category = normalizeServerTransactionCategory(parsedData.category, parsedData.type, text || parsedData.description);
+      }
       res.json(parsedData);
     } catch (parseError) {
       console.error("Failed to parse Gemini response as JSON, falling back locally:", responseText);
@@ -384,6 +840,7 @@ Ouça o áudio gravado em português e faça o seguinte:
 1. Transcreva o que o usuário disse na chave "transcript".
 2. Analise se é um LANÇAMENTO DE TRANSAÇÃO (Receita ou Despesa) ou uma CONVERSA/PERGUNTA.
 3. Extraia o tipo ("receita" ou "despesa"), valor numérico (amount), categoria, descrição, local ou cliente.
+ATENÇÃO RIGOROSA NO VALOR (amount): O valor numérico deve ser exatamente o que o usuário falou. Ex: se disser '$10.00', '10.00', 'dez dólares' ou 'dez reais', o amount DEVE ser 10 (NUNCA 1). Se disser '100', o amount é 100.
 Data de referência atual: ${referenceDate}.
 
 Retorne APENAS o JSON no formato:
@@ -424,7 +881,7 @@ Retorne APENAS o JSON no formato:
             intent: { type: Type.STRING, description: "Deve ser 'transaction' ou 'chat'." },
             reply: { type: Type.STRING, description: `Resposta amigável em português utilizando ${activeCurrency.symbol}.` },
             type: { type: Type.STRING, description: "Deve ser 'receita' ou 'despesa'." },
-            amount: { type: Type.NUMBER, description: `Valor da transação na moeda ${activeCurrency.symbol}.` },
+            amount: { type: Type.NUMBER, description: `Valor exato da transação na moeda ${activeCurrency.symbol}. Ex: $10.00 ou 10 reais = 10.` },
             category: { type: Type.STRING, description: "Categoria da transação." },
             location: { type: Type.STRING, description: "Local ou null." },
             client: { type: Type.STRING, description: "Cliente ou null." },
@@ -445,6 +902,14 @@ Retorne APENAS o JSON no formato:
       .trim();
 
     const parsedData = JSON.parse(cleanJson);
+    if (parsedData.intent === "transaction" && parsedData.type) {
+      // Reconcile and guarantee exact amount matching
+      const explicitAmount = parseFinancialAmount(parsedData.transcript || parsedData.description);
+      if (explicitAmount > 0 && (!parsedData.amount || parsedData.amount === 0 || (parsedData.amount === 1 && (explicitAmount === 10 || explicitAmount === 100)))) {
+        parsedData.amount = explicitAmount;
+      }
+      parsedData.category = normalizeServerTransactionCategory(parsedData.category, parsedData.type, parsedData.transcript || parsedData.description);
+    }
     res.json(parsedData);
   } catch (error: any) {
     console.warn("Parse audio failed with Gemini, returning fallback:", error);
@@ -480,10 +945,11 @@ app.post("/api/scan-receipt", async (req, res) => {
 
     const receiptPrompt = `Analise a imagem deste recibo, cupom fiscal ou nota fiscal de compra e extraia os dados estruturados no formato JSON especificado.
 A moeda configurada no perfil do usuário é ${activeCurrency.name} (${activeCurrency.symbol}).
+Selecione EXATAMENTE uma das categorias de despesa do sistema: "Alimentação", "Transporte", "Moradia", "Lazer", "Saúde", "Compras", "Outros".
 Você deve retornar APENAS o objeto JSON abaixo, sem blocos de código markdown ou texto explicativo:
 {
   "amount": número (valor total numérico pago/comprado),
-  "category": categoria adequada (ex: "Alimentação", "Transporte", "Moradia", "Lazer", "Saúde", "Compras", "Outros"),
+  "category": "Alimentação" | "Transporte" | "Moradia" | "Lazer" | "Saúde" | "Compras" | "Outros",
   "location": nome do estabelecimento/empresa emitente do recibo ou null,
   "date": data no formato "YYYY-MM-DD" se encontrada no cupom (senão retorne o dia de hoje no formato YYYY-MM-DD),
   "description": descrição sucinta da transação ou resumo dos principais itens comprados (ex: "Almoço de negócios", "Supermercado itens", "Café Dunkin")
@@ -541,6 +1007,7 @@ Você deve retornar APENAS o objeto JSON abaixo, sem blocos de código markdown 
 
     try {
       const parsedData = JSON.parse(cleanJson);
+      parsedData.category = normalizeServerTransactionCategory(parsedData.category, "despesa", parsedData.description || parsedData.location);
       res.json(parsedData);
     } catch (parseError) {
       console.warn("Failed to parse Gemini receipt response as JSON, using fallback:");

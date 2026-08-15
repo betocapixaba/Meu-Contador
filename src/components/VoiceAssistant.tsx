@@ -22,6 +22,8 @@ import {
 } from "lucide-react";
 import { isDemoActive, localAddDoc } from "../utils/demoDb";
 import { Currency, formatCurrency } from "../utils/currency";
+import { normalizeCategory } from "../utils/categories";
+import { parseFinancialAmount } from "../utils/amountParser";
 
 interface VoiceAssistantProps {
   darkMode: boolean;
@@ -270,31 +272,8 @@ export default function VoiceAssistant({ darkMode, onTransactionAdded, onClose, 
       }
     }
 
-    const numbers = lower.match(/(?:r\$\s*|\$\s*|€\s*|£\s*|¥\s*|chf\s*|a\$\s*|c\$\s*|zł\s*|kr\s*)?(\d+(?:\.\d{3})*(?:,\d{1,2})?|\d+(?:\.\d+)?)/gi);
-    let amount = 0;
-    if (numbers) {
-      for (const numStr of numbers) {
-        let cleaned = numStr.replace(/r\$/gi, "").replace(/\$/gi, "").replace(/€/gi, "").replace(/£/gi, "").replace(/¥/gi, "").replace(/chf/gi, "").replace(/a\$/gi, "").replace(/c\$/gi, "").replace(/zł/gi, "").replace(/kr/gi, "").replace(/\s/g, "").trim();
-        if (cleaned.includes(",") && cleaned.includes(".")) {
-          cleaned = cleaned.replace(/\./g, "").replace(/,/g, ".");
-        } else if (cleaned.includes(",")) {
-          cleaned = cleaned.replace(/,/g, ".");
-        }
-        const val = parseFloat(cleaned);
-        if (!isNaN(val) && val > 0 && val !== new Date().getFullYear()) {
-          amount = val;
-          break;
-        }
-      }
-    }
-
-    let category = type === "receita" ? "Serviços" : "Outros";
-    if (lower.includes("almoço") || lower.includes("jantar") || lower.includes("comer") || lower.includes("mercado") || lower.includes("padaria") || lower.includes("dunkin") || lower.includes("restaurante")) category = "Alimentação";
-    else if (lower.includes("uber") || lower.includes("gasolina") || lower.includes("ônibus") || lower.includes("onibus") || lower.includes("taxi") || lower.includes("combustível")) category = "Transporte";
-    else if (lower.includes("aluguel") || lower.includes("luz") || lower.includes("agua") || lower.includes("água") || lower.includes("internet") || lower.includes("condomínio")) category = "Moradia";
-    else if (lower.includes("salario") || lower.includes("salário")) category = "Salário";
-    else if (lower.includes("cinema") || lower.includes("show") || lower.includes("bar") || lower.includes("praia") || lower.includes("festa")) category = "Lazer";
-    else if (lower.includes("farmacia") || lower.includes("farmácia") || lower.includes("médico") || lower.includes("remédio")) category = "Saúde";
+    const amount = parseFinancialAmount(text);
+    const category = normalizeCategory(null, type, text);
 
     let client: string | null = null;
     if (type === "receita") {
@@ -353,10 +332,10 @@ export default function VoiceAssistant({ darkMode, onTransactionAdded, onClose, 
       parsedData = localParseCommand(commandText);
     }
 
-    await saveTransactionResult(parsedData);
+    await saveTransactionResult(parsedData, commandText);
   };
 
-  const saveTransactionResult = async (parsedData: any) => {
+  const saveTransactionResult = async (parsedData: any, originalInputText?: string) => {
     try {
       if (!parsedData || (parsedData.intent === "chat" && !parsedData.type)) {
         setError(parsedData?.reply || "Entendido! Se desejar lançar um valor, fale o valor e o motivo (ex: 'Recebi 500 reais' ou 'Gastei 40 no almoço').");
@@ -364,7 +343,12 @@ export default function VoiceAssistant({ darkMode, onTransactionAdded, onClose, 
         return;
       }
 
-      const amountVal = Number(parsedData.amount) || 0;
+      let amountVal = Number(parsedData.amount) || 0;
+      const detectedAmount = parseFinancialAmount(originalInputText || transcript || parsedData.description || "");
+      if (detectedAmount > 0 && (amountVal <= 0 || (amountVal === 1 && (detectedAmount === 10 || detectedAmount === 100)))) {
+        amountVal = detectedAmount;
+      }
+
       if (amountVal <= 0) {
         setError("Não conseguimos identificar o valor em dinheiro na sua frase. Tente dizer: 'Recebi 150 reais' ou 'Gastei 30 no mercado'.");
         setLoading(false);
@@ -375,12 +359,20 @@ export default function VoiceAssistant({ darkMode, onTransactionAdded, onClose, 
       const currentUser = isDemo ? { uid: "local-demo-user" } : auth.currentUser;
       
       if (currentUser) {
+        const finalType: "receita" | "despesa" = parsedData.type === "receita" ? "receita" : "despesa";
+        const finalCategory = normalizeCategory(
+          parsedData.category,
+          finalType,
+          originalInputText || parsedData.description || transcript
+        );
+        parsedData.category = finalCategory;
+
         const transactionData = {
           userId: currentUser.uid,
-          type: parsedData.type === "receita" ? "receita" : "despesa",
+          type: finalType,
           amount: amountVal,
           currency: currency?.code || "BRL",
-          category: parsedData.category || (parsedData.type === "receita" ? "Serviços" : "Outros"),
+          category: finalCategory,
           location: parsedData.location || null,
           client: parsedData.client || null,
           description: parsedData.description || (parsedData.type === "receita" ? "Receita via Voz" : "Despesa via Voz"),
