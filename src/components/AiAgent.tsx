@@ -57,6 +57,7 @@ interface AgentMessage {
 }
 
 export default function AiAgent({ darkMode, onTransactionAdded, currency, transactions = [] }: AiAgentProps) {
+  const activeSymbol = currency?.symbol || "R$";
   const [inputText, setInputText] = useState("");
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState("");
@@ -67,11 +68,26 @@ export default function AiAgent({ darkMode, onTransactionAdded, currency, transa
     {
       id: "welcome-1",
       sender: "agent",
-      text: "Olá! Sou o seu Agente de IA para registro e consulta de Entradas e Saídas. Pode falar ou digitar frases como 'Recebi R$ 1.500 do cliente João', 'Gastei R$ 45,90 no almoço' ou me perguntar 'Quanto eu gastei este mês?'.",
+      text: `Olá! Sou a Kathleen, sua Agente de IA para registro e consulta de Entradas e Saídas na moeda ${currency?.name || "Real brasileiro (R$)"}. Pode falar ou digitar frases como 'Recebi ${activeSymbol} 1.500 do cliente João', 'Gastei ${activeSymbol} 45,90 no almoço' ou me perguntar 'Quanto eu gastei este mês?'.`,
       timestamp: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
     }
   ]);
   const [recentAgentLogs, setRecentAgentLogs] = useState<any[]>([]);
+
+  // Update welcome message if currency changes and no user interaction yet
+  useEffect(() => {
+    setMessages(prev => {
+      if (prev.length === 1 && prev[0].id === "welcome-1") {
+        return [{
+          id: "welcome-1",
+          sender: "agent",
+          text: `Olá! Sou a Kathleen, sua Agente de IA para registro e consulta de Entradas e Saídas na moeda ${currency?.name || "Real brasileiro (R$)"}. Pode falar ou digitar frases como 'Recebi ${activeSymbol} 1.500 do cliente João', 'Gastei ${activeSymbol} 45,90 no almoço' ou me perguntar 'Quanto eu gastei este mês?'.`,
+          timestamp: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+        }];
+      }
+      return prev;
+    });
+  }, [currency?.code, activeSymbol]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -215,7 +231,7 @@ export default function AiAgent({ darkMode, onTransactionAdded, currency, transa
     let amount = 0;
     if (numbers) {
       for (const numStr of numbers) {
-        let cleaned = numStr.replace(/r\$/g, "").replace(/\$/g, "").replace(/\s/g, "").trim();
+        let cleaned = numStr.replace(/r\$/gi, "").replace(/\$/gi, "").replace(/€/gi, "").replace(/£/gi, "").replace(/¥/gi, "").replace(/chf/gi, "").replace(/a\$/gi, "").replace(/c\$/gi, "").replace(/zł/gi, "").replace(/kr/gi, "").replace(/\s/g, "").trim();
         if (cleaned.includes(",") && cleaned.includes(".")) {
           cleaned = cleaned.replace(/\./g, "").replace(/,/g, ".");
         } else if (cleaned.includes(",")) {
@@ -231,7 +247,17 @@ export default function AiAgent({ darkMode, onTransactionAdded, currency, transa
 
     if (amount === 0) {
       for (const [w, val] of Object.entries(wordValues)) {
-        if (lower.includes(w + " reais") || lower.includes(w + " contos") || lower.includes(w + " dólares") || lower.includes(w + " mangos")) {
+        if (
+          lower.includes(w + " reais") || 
+          lower.includes(w + " contos") || 
+          lower.includes(w + " dólares") || 
+          lower.includes(w + " dolares") || 
+          lower.includes(w + " euros") || 
+          lower.includes(w + " libras") || 
+          lower.includes(w + " pesos") || 
+          lower.includes(w + " mangos") ||
+          lower.includes(w + " pratas")
+        ) {
           amount = val;
           break;
         }
@@ -304,6 +330,7 @@ export default function AiAgent({ darkMode, onTransactionAdded, currency, transa
         body: JSON.stringify({
           text: textToProcess,
           currentDate: new Date().toISOString(),
+          currency: currency || { code: "BRL", symbol: "R$", name: "Real brasileiro (R$)" },
           transactionsSummary: {
             totalIncome,
             totalExpense,
@@ -342,7 +369,7 @@ export default function AiAgent({ darkMode, onTransactionAdded, currency, transa
       const agentMsg: AgentMessage = {
         id: agentMsgId,
         sender: "agent",
-        text: parsedResult.reply || `Entendi! Identifiquei uma ${isRevenue ? "ENTRADA (Receita)" : "SAÍDA (Despesa)"} no valor de ${formatCurrency(parsedResult.amount || 0, currency?.symbol || "R$")}. Confirme os dados abaixo para lançar no sistema:`,
+        text: parsedResult.reply || `Entendi! Identifiquei uma ${isRevenue ? "ENTRADA (Receita)" : "SAÍDA (Despesa)"} no valor de ${formatCurrency(parsedResult.amount || 0, activeSymbol)}. Confirme os dados abaixo para lançar no sistema:`,
         timestamp: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
         parsedData: parsedResult,
         status: "pending"
@@ -369,6 +396,7 @@ export default function AiAgent({ darkMode, onTransactionAdded, currency, transa
         userId: currentUser.uid,
         type: msg.parsedData.type,
         amount: Number(msg.parsedData.amount) || 0,
+        currency: currency?.code || "BRL",
         category: msg.parsedData.category || "Outros",
         location: msg.parsedData.location || null,
         client: msg.parsedData.client || null,
@@ -409,10 +437,10 @@ export default function AiAgent({ darkMode, onTransactionAdded, currency, transa
   };
 
   const quickPrompts = [
-    { label: "Recebi R$ 800 do cliente Pedro", type: "receita" },
-    { label: "Gastei R$ 45,90 no almoço no restaurante", type: "despesa" },
-    { label: "Entrada de R$ 1.200 de serviços prestados", type: "receita" },
-    { label: "Saída de R$ 90 de gasolina no posto", type: "despesa" }
+    { label: `Recebi ${activeSymbol} 800 do cliente Pedro`, type: "receita" },
+    { label: `Gastei ${activeSymbol} 45,90 no almoço no restaurante`, type: "despesa" },
+    { label: `Entrada de ${activeSymbol} 1.200 de serviços prestados`, type: "receita" },
+    { label: `Saída de ${activeSymbol} 90 de gasolina no posto`, type: "despesa" }
   ];
 
   return (
@@ -427,14 +455,17 @@ export default function AiAgent({ darkMode, onTransactionAdded, currency, transa
             <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-white dark:border-slate-900 rounded-full animate-pulse"></span>
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-lg font-black tracking-tight">Agente de IA - Entradas e Saídas</h1>
               <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
                 IA Ativa
               </span>
+              <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 flex items-center gap-1">
+                Moeda do Perfil: <strong>{currency?.symbol || "R$"} ({currency?.code || "BRL"})</strong>
+              </span>
             </div>
             <p className={`text-xs ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
-              Fale ou digite comandos naturais para registrar automaticamente receitas e despesas.
+              Fale ou digite comandos naturais para registrar automaticamente receitas e despesas na moeda do seu perfil.
             </p>
           </div>
         </div>

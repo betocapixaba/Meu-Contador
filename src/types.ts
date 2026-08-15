@@ -3,6 +3,7 @@ export interface Transaction {
   userId: string;
   type: "receita" | "despesa";
   amount: number;
+  currency?: string; // e.g. "BRL", "USD", "EUR"
   category: string;
   location: string | null;
   client: string | null;

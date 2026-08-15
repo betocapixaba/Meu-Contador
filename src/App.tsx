@@ -936,6 +936,7 @@ export default function App() {
                 darkMode={darkMode} 
                 onTransactionAdded={fetchData}
                 onClose={() => setShowVoiceModal(false)}
+                currency={currency}
               />
             </div>
           </div>
@@ -949,6 +950,7 @@ export default function App() {
                 darkMode={darkMode} 
                 onTransactionAdded={fetchData}
                 onClose={() => setShowScanModal(false)}
+                currency={currency}
               />
             </div>
           </div>

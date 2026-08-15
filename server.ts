@@ -48,7 +48,17 @@ function parsePortugueseWordsToNumber(text: string): number {
   };
 
   for (const [w, val] of Object.entries(wordValues)) {
-    if (words.includes(w + " reais") || words.includes(w + " contos") || words.includes(w + " dólares") || words.includes(w + " dolares") || words.includes(w + " mangos")) {
+    if (
+      words.includes(w + " reais") || 
+      words.includes(w + " contos") || 
+      words.includes(w + " dólares") || 
+      words.includes(w + " dolares") || 
+      words.includes(w + " euros") || 
+      words.includes(w + " libras") || 
+      words.includes(w + " pesos") || 
+      words.includes(w + " mangos") ||
+      words.includes(w + " pratas")
+    ) {
       return val;
     }
   }
@@ -57,12 +67,13 @@ function parsePortugueseWordsToNumber(text: string): number {
 }
 
 // Helper: Local dynamic parsing when Gemini is unavailable (Quota/Rate limit/No API Key)
-function generateLocalFallbackCommandParse(text: string, referenceDate: string, transactionsSummary?: any) {
+function generateLocalFallbackCommandParse(text: string, referenceDate: string, transactionsSummary?: any, currency?: { code: string; symbol: string; name: string }) {
   const lower = text.toLowerCase().trim();
   const ref = new Date(referenceDate);
   let year = ref.getFullYear();
   let month = String(ref.getMonth() + 1).padStart(2, "0");
   let day = String(ref.getDate()).padStart(2, "0");
+  const currSymbol = currency?.symbol || "R$";
 
   if (lower.includes("ontem")) {
     const yesterday = new Date(ref);
@@ -95,12 +106,12 @@ function generateLocalFallbackCommandParse(text: string, referenceDate: string, 
   ];
   const hasTransactionKeyword = revenueKeywords.some(kw => lower.includes(kw)) || expenseKeywords.some(kw => lower.includes(kw));
 
-  // Regex to extract numeric values (supporting formats like: 1500, 1.500, 15,50, 15.50, R$ 50, $25, etc.)
-  const numbers = lower.match(/(?:r\$\s*|\$\s*)?(\d+(?:\.\d{3})*(?:,\d{1,2})?|\d+(?:\.\d+)?)/gi);
+  // Regex to extract numeric values (supporting formats like: 1500, 1.500, 15,50, 15.50, R$ 50, $25, €30, £40, etc.)
+  const numbers = lower.match(/(?:r\$\s*|\$\s*|€\s*|£\s*|¥\s*|chf\s*|a\$\s*|c\$\s*|zł\s*|kr\s*)?(\d+(?:\.\d{3})*(?:,\d{1,2})?|\d+(?:\.\d+)?)/gi);
   let amount = 0;
   if (numbers) {
     for (const numStr of numbers) {
-      let cleaned = numStr.replace(/r\$/g, "").replace(/\$/g, "").replace(/\s/g, "").trim();
+      let cleaned = numStr.replace(/r\$/gi, "").replace(/\$/gi, "").replace(/€/gi, "").replace(/£/gi, "").replace(/¥/gi, "").replace(/chf/gi, "").replace(/a\$/gi, "").replace(/c\$/gi, "").replace(/zł/gi, "").replace(/kr/gi, "").replace(/\s/g, "").trim();
       if (cleaned.includes(",") && cleaned.includes(".")) {
         cleaned = cleaned.replace(/\./g, "").replace(/,/g, ".");
       } else if (cleaned.includes(",")) {
@@ -121,23 +132,23 @@ function generateLocalFallbackCommandParse(text: string, referenceDate: string, 
 
   // If user is asking a conversational question or no transaction keyword or amount was given
   if (isQuestion || (!hasTransactionKeyword && amount === 0)) {
-    let reply = "Olá! Sou a Kathleen, sua Assistente Contábil e Financeira. Você pode me dizer para registrar entradas e saídas (ex: 'Recebi R$ 1.500 do João' ou 'Gastei R$ 50 no almoço') ou me perguntar sobre seu saldo e relatórios!";
+    let reply = `Olá! Sou a Kathleen, sua Assistente Contábil e Financeira. Você pode me dizer para registrar entradas e saídas (ex: 'Recebi ${currSymbol} 1.500 do João' ou 'Gastei ${currSymbol} 50 no almoço') ou me perguntar sobre seu saldo e relatórios!`;
     
     if (lower.includes("quanto") && (lower.includes("gastei") || lower.includes("despesa"))) {
       if (transactionsSummary && transactionsSummary.totalExpense !== undefined) {
-        reply = `Você possui R$ ${Number(transactionsSummary.totalExpense).toLocaleString("pt-BR", { minimumFractionDigits: 2 })} em despesas registradas.`;
+        reply = `Você possui ${currSymbol} ${Number(transactionsSummary.totalExpense).toLocaleString("pt-BR", { minimumFractionDigits: 2 })} em despesas registradas.`;
       } else {
         reply = "Seus lançamentos de despesas podem ser acompanhados no Painel Principal e na aba Despesas.";
       }
     } else if (lower.includes("quanto") && (lower.includes("ganhei") || lower.includes("recebi") || lower.includes("receita"))) {
       if (transactionsSummary && transactionsSummary.totalIncome !== undefined) {
-        reply = `Suas receitas totais cadastradas somam R$ ${Number(transactionsSummary.totalIncome).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}.`;
+        reply = `Suas receitas totais cadastradas somam ${currSymbol} ${Number(transactionsSummary.totalIncome).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}.`;
       } else {
         reply = "Você pode acompanhar todas as suas receitas cadastradas na aba Receitas.";
       }
     } else if (lower.includes("saldo")) {
       if (transactionsSummary && transactionsSummary.balance !== undefined) {
-        reply = `Seu saldo atual é de R$ ${Number(transactionsSummary.balance).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}.`;
+        reply = `Seu saldo atual é de ${currSymbol} ${Number(transactionsSummary.balance).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}.`;
       } else {
         reply = "Consulte o seu saldo total disponível diretamente no cartão do Painel Principal.";
       }
@@ -202,6 +213,8 @@ function generateLocalFallbackCommandParse(text: string, referenceDate: string, 
   const description = cleanDesc.charAt(0).toUpperCase() + cleanDesc.slice(1);
   const isRecurrent = lower.includes("mensal") || lower.includes("recorrente") || lower.includes("assinatura") || lower.includes("netflix") || lower.includes("spotify") || lower.includes("aluguel") || lower.includes("todo mês") || lower.includes("todo mes");
 
+  const formattedAmount = amount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
   return {
     intent: "transaction",
     type,
@@ -213,30 +226,34 @@ function generateLocalFallbackCommandParse(text: string, referenceDate: string, 
     date: `${year}-${month}-${day}`,
     isRecurrent,
     confidence: 0.85,
-    reply: `Entendi! Identifiquei uma ${type === "receita" ? "ENTRADA (Receita)" : "SAÍDA (Despesa)"} de R$ ${amount.toFixed(2)} (${category}).`
+    reply: `Entendi! Identifiquei uma ${type === "receita" ? "ENTRADA (Receita)" : "SAÍDA (Despesa)"} de ${currSymbol} ${formattedAmount} (${category}).`
   };
 }
 
 // 1. API: Parse voice command or text command
 app.post("/api/parse-command", async (req, res) => {
-  const { text, currentDate, transactionsSummary } = req.body;
+  const { text, currentDate, transactionsSummary, currency } = req.body;
   if (!text) {
     res.status(400).json({ error: "O texto do comando é obrigatório." });
     return;
   }
 
   const referenceDate = currentDate || new Date().toISOString();
+  const activeCurrency = currency || { code: "BRL", symbol: "R$", name: "Real brasileiro (R$)" };
 
   try {
     const ai = getAiClient();
 
     const systemPrompt = `Você é Kathleen, a assistente contábil e financeira inteligente do aplicativo.
+A moeda oficial configurada e escolhida no perfil do usuário é: ${activeCurrency.name} (Símbolo: "${activeCurrency.symbol}", Código: "${activeCurrency.code}").
+Todas as transações, valores numéricos, respostas e confirmações DEVEM ser efetuadas de acordo com esta moeda selecionada (${activeCurrency.symbol}).
+
 Sua tarefa é analisar rigorosamente frases faladas ou digitadas em português (do Brasil ou internacional) sobre finanças e determinar com precisão a intenção do usuário:
 
-1. Se for para REGISTRAR ou LANÇAR uma transação financeira (ex: "Gastei 50 no almoço", "Recebi 1500 do cliente João", "Paguei 120 de conta de luz", "Pix de 200 reais da Maria", "Vendi um celular por 800 reais", "Salário caiu 3500 reais"):
+1. Se for para REGISTRAR ou LANÇAR uma transação financeira (ex: "Gastei 50 no almoço", "Recebi 1500 do cliente João", "Paguei 120 de conta de luz", "Pix de 200 da Maria", "Vendi um produto por 800", "Salário caiu 3500"):
    - intent: "transaction"
-   - type: "receita" (para dinheiro que entra, ganhos, faturamentos, vendas, salários, pix recebidos) OU "despesa" (para gastos, compras, pagamentos, contas, saídas)
-   - amount: número decimal positivo (ex: 50, 1500.50, 120)
+   - type: "receita" (para dinheiro que entra, ganhos, faturamentos, vendas, salários, depósitos recebidos) OU "despesa" (para gastos, compras, pagamentos, contas, saídas)
+   - amount: número decimal positivo correspondente ao valor na moeda ${activeCurrency.symbol} (ex: 50, 1500.50, 120)
    - category: categoria mais apropriada (ex: "Alimentação", "Transporte", "Moradia", "Salário", "Serviços", "Lazer", "Saúde", "Compras", "Educação", "Investimentos", "Outros")
    - location: estabelecimento/local (se mencionado, ex: "Dunkin", "Uber", "Mercado Extra") ou null
    - client: nome do cliente ou pagador (se for receita, ex: "João", "Maria") ou null
@@ -244,13 +261,14 @@ Sua tarefa é analisar rigorosamente frases faladas ou digitadas em português (
    - date: data no formato "YYYY-MM-DD" baseada na data de referência (${referenceDate})
    - isRecurrent: boolean (true se for mensalidade, assinatura, aluguel, recorrente)
    - confidence: número de 0 a 1 (ex: 0.95)
-   - reply: frase amigável confirmando o lançamento
+   - reply: frase amigável confirmando o lançamento sempre utilizando o símbolo da moeda "${activeCurrency.symbol}" (ex: "Entendi! Identifiquei uma ENTRADA (Receita) de ${activeCurrency.symbol} 1.500,00...")
 
 2. Se for uma PERGUNTA, CONVERSA ou SAUDAÇÃO (ex: "Olá", "Quanto gastei este mês?", "Como economizar?"):
    - intent: "chat"
-   - reply: resposta prestativa, empática e financeira em português
+   - reply: resposta prestativa, empática e financeira em português, sempre formatando valores em ${activeCurrency.symbol}
 
 Contexto de referência:
+- Moeda do perfil: ${activeCurrency.name} (${activeCurrency.symbol})
 - Data de referência: ${referenceDate}
 - Resumo financeiro do usuário: ${JSON.stringify(transactionsSummary || {})}`;
 
@@ -269,7 +287,7 @@ Contexto de referência:
             },
             reply: {
               type: Type.STRING,
-              description: "Resposta amigável para o usuário em português."
+              description: `Resposta amigável para o usuário em português utilizando o símbolo ${activeCurrency.symbol}.`
             },
             type: {
               type: Type.STRING,
@@ -277,7 +295,7 @@ Contexto de referência:
             },
             amount: {
               type: Type.NUMBER,
-              description: "Valor numérico extraído da transação."
+              description: `Valor numérico extraído da transação na moeda ${activeCurrency.symbol}.`
             },
             category: {
               type: Type.STRING,
@@ -324,25 +342,26 @@ Contexto de referência:
       res.json(parsedData);
     } catch (parseError) {
       console.error("Failed to parse Gemini response as JSON, falling back locally:", responseText);
-      const localResult = generateLocalFallbackCommandParse(text, referenceDate, transactionsSummary);
+      const localResult = generateLocalFallbackCommandParse(text, referenceDate, transactionsSummary, activeCurrency);
       res.json(localResult);
     }
   } catch (error: any) {
     console.warn("Parse command fallback activated: Gemini error/offline:", error);
-    const localResult = generateLocalFallbackCommandParse(text, referenceDate, transactionsSummary);
+    const localResult = generateLocalFallbackCommandParse(text, referenceDate, transactionsSummary, activeCurrency);
     res.json(localResult);
   }
 });
 
 // 1.1 API: Direct Voice Audio Clip Processing (Multimodal Gemini 3.7 Flash Audio)
 app.post("/api/parse-audio", async (req, res) => {
-  const { audioBase64, mimeType = "audio/webm", currentDate, transactionsSummary } = req.body;
+  const { audioBase64, mimeType = "audio/webm", currentDate, transactionsSummary, currency } = req.body;
   if (!audioBase64) {
     res.status(400).json({ error: "O áudio em base64 é obrigatório." });
     return;
   }
 
   const referenceDate = currentDate || new Date().toISOString();
+  const activeCurrency = currency || { code: "BRL", symbol: "R$", name: "Real brasileiro (R$)" };
 
   // Extract clean base64 data
   const matches = audioBase64.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.+)$/);
@@ -357,6 +376,10 @@ app.post("/api/parse-audio", async (req, res) => {
     const ai = getAiClient();
 
     const audioPrompt = `Você é Kathleen, a assistente contábil e financeira inteligente do aplicativo.
+A moeda oficial configurada e escolhida no perfil do usuário é: ${activeCurrency.name} (Símbolo: "${activeCurrency.symbol}", Código: "${activeCurrency.code}").
+Todas as transações detectadas devem ser computadas no valor numérico correspondente a essa moeda (${activeCurrency.symbol}).
+Na resposta em 'reply', sempre use o símbolo da moeda "${activeCurrency.symbol}" e mencione o valor de acordo com a moeda do perfil.
+
 Ouça o áudio gravado em português e faça o seguinte:
 1. Transcreva o que o usuário disse na chave "transcript".
 2. Analise se é um LANÇAMENTO DE TRANSAÇÃO (Receita ou Despesa) ou uma CONVERSA/PERGUNTA.
@@ -367,7 +390,7 @@ Retorne APENAS o JSON no formato:
 {
   "transcript": "texto exato transcrito do áudio falado",
   "intent": "transaction" ou "chat",
-  "reply": "Confirmação ou resposta em português",
+  "reply": "Confirmação ou resposta em português usando ${activeCurrency.symbol}",
   "type": "receita" ou "despesa",
   "amount": número,
   "category": "categoria adequada",
@@ -399,9 +422,9 @@ Retorne APENAS o JSON no formato:
           properties: {
             transcript: { type: Type.STRING, description: "Transcrição do áudio." },
             intent: { type: Type.STRING, description: "Deve ser 'transaction' ou 'chat'." },
-            reply: { type: Type.STRING, description: "Resposta amigável em português." },
+            reply: { type: Type.STRING, description: `Resposta amigável em português utilizando ${activeCurrency.symbol}.` },
             type: { type: Type.STRING, description: "Deve ser 'receita' ou 'despesa'." },
-            amount: { type: Type.NUMBER, description: "Valor da transação." },
+            amount: { type: Type.NUMBER, description: `Valor da transação na moeda ${activeCurrency.symbol}.` },
             category: { type: Type.STRING, description: "Categoria da transação." },
             location: { type: Type.STRING, description: "Local ou null." },
             client: { type: Type.STRING, description: "Cliente ou null." },
@@ -435,11 +458,13 @@ Retorne APENAS o JSON no formato:
 // 2. API: Scan receipt image (using Gemini Multimodal capability!)
 app.post("/api/scan-receipt", async (req, res) => {
   try {
-    const { imageBase64 } = req.body;
+    const { imageBase64, currency } = req.body;
     if (!imageBase64) {
       res.status(400).json({ error: "A imagem do recibo em base64 é obrigatória." });
       return;
     }
+
+    const activeCurrency = currency || { code: "BRL", symbol: "R$", name: "Real brasileiro (R$)" };
 
     // Extract base64 clean data and mime type
     const matches = imageBase64.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.+)$/);
@@ -454,9 +479,10 @@ app.post("/api/scan-receipt", async (req, res) => {
     const ai = getAiClient();
 
     const receiptPrompt = `Analise a imagem deste recibo, cupom fiscal ou nota fiscal de compra e extraia os dados estruturados no formato JSON especificado.
+A moeda configurada no perfil do usuário é ${activeCurrency.name} (${activeCurrency.symbol}).
 Você deve retornar APENAS o objeto JSON abaixo, sem blocos de código markdown ou texto explicativo:
 {
-  "amount": número (valor total pago/comprado),
+  "amount": número (valor total numérico pago/comprado),
   "category": categoria adequada (ex: "Alimentação", "Transporte", "Moradia", "Lazer", "Saúde", "Compras", "Outros"),
   "location": nome do estabelecimento/empresa emitente do recibo ou null,
   "date": data no formato "YYYY-MM-DD" se encontrada no cupom (senão retorne o dia de hoje no formato YYYY-MM-DD),

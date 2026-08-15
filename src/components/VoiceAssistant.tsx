@@ -21,14 +21,17 @@ import {
   Loader2
 } from "lucide-react";
 import { isDemoActive, localAddDoc } from "../utils/demoDb";
+import { Currency, formatCurrency } from "../utils/currency";
 
 interface VoiceAssistantProps {
   darkMode: boolean;
   onTransactionAdded: () => void;
   onClose?: () => void;
+  currency?: Currency;
 }
 
-export default function VoiceAssistant({ darkMode, onTransactionAdded, onClose }: VoiceAssistantProps) {
+export default function VoiceAssistant({ darkMode, onTransactionAdded, onClose, currency }: VoiceAssistantProps) {
+  const activeSymbol = currency?.symbol || "R$";
   const [isListening, setIsListening] = useState(false);
   const [isAudioRecording, setIsAudioRecording] = useState(false);
   const [transcript, setTranscript] = useState("");
@@ -233,7 +236,8 @@ export default function VoiceAssistant({ darkMode, onTransactionAdded, onClose }
           body: JSON.stringify({
             audioBase64: base64Data,
             mimeType: blob.type || "audio/webm",
-            currentDate: new Date().toISOString()
+            currentDate: new Date().toISOString(),
+            currency: currency || { code: "BRL", symbol: "R$", name: "Real brasileiro (R$)" }
           })
         });
 
@@ -266,11 +270,11 @@ export default function VoiceAssistant({ darkMode, onTransactionAdded, onClose }
       }
     }
 
-    const numbers = lower.match(/(?:r\$\s*|\$\s*)?(\d+(?:\.\d{3})*(?:,\d{1,2})?|\d+(?:\.\d+)?)/gi);
+    const numbers = lower.match(/(?:r\$\s*|\$\s*|€\s*|£\s*|¥\s*|chf\s*|a\$\s*|c\$\s*|zł\s*|kr\s*)?(\d+(?:\.\d{3})*(?:,\d{1,2})?|\d+(?:\.\d+)?)/gi);
     let amount = 0;
     if (numbers) {
       for (const numStr of numbers) {
-        let cleaned = numStr.replace(/r\$/g, "").replace(/\$/g, "").replace(/\s/g, "").trim();
+        let cleaned = numStr.replace(/r\$/gi, "").replace(/\$/gi, "").replace(/€/gi, "").replace(/£/gi, "").replace(/¥/gi, "").replace(/chf/gi, "").replace(/a\$/gi, "").replace(/c\$/gi, "").replace(/zł/gi, "").replace(/kr/gi, "").replace(/\s/g, "").trim();
         if (cleaned.includes(",") && cleaned.includes(".")) {
           cleaned = cleaned.replace(/\./g, "").replace(/,/g, ".");
         } else if (cleaned.includes(",")) {
@@ -315,7 +319,8 @@ export default function VoiceAssistant({ darkMode, onTransactionAdded, onClose }
       client,
       description: text.charAt(0).toUpperCase() + text.slice(1),
       date: new Date().toISOString().split("T")[0],
-      isRecurrent: lower.includes("mensal") || lower.includes("recorrente") || lower.includes("assinatura")
+      isRecurrent: lower.includes("mensal") || lower.includes("recorrente") || lower.includes("assinatura"),
+      reply: `Identifiquei uma ${type === "receita" ? "Receita" : "Despesa"} de ${formatCurrency(amount, activeSymbol)}.`
     };
   };
 
@@ -333,7 +338,8 @@ export default function VoiceAssistant({ darkMode, onTransactionAdded, onClose }
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           text: commandText,
-          currentDate: new Date().toISOString()
+          currentDate: new Date().toISOString(),
+          currency: currency || { code: "BRL", symbol: "R$", name: "Real brasileiro (R$)" }
         })
       });
 
@@ -373,6 +379,7 @@ export default function VoiceAssistant({ darkMode, onTransactionAdded, onClose }
           userId: currentUser.uid,
           type: parsedData.type === "receita" ? "receita" : "despesa",
           amount: amountVal,
+          currency: currency?.code || "BRL",
           category: parsedData.category || (parsedData.type === "receita" ? "Serviços" : "Outros"),
           location: parsedData.location || null,
           client: parsedData.client || null,
@@ -395,13 +402,13 @@ export default function VoiceAssistant({ darkMode, onTransactionAdded, onClose }
         
         // Conversational speech feedback
         const spokenType = parsedData.type === "receita" ? "Receita" : "Despesa";
-        speakText(`${spokenType} de ${amountVal} reais registrada com sucesso na categoria ${transactionData.category}!`);
+        speakText(`${spokenType} de ${formatCurrency(amountVal, activeSymbol)} registrada com sucesso na categoria ${transactionData.category}!`);
       } else {
         throw new Error("Usuário não autenticado para salvar.");
       }
     } catch (err: any) {
       console.error(err);
-      setError(err.message || "Não conseguimos compreender a transação. Tente falar ou digitar de forma mais direta, ex: 'Gastei 15 reais no almoço'.");
+      setError(err.message || "Não conseguimos compreender a transação. Tente falar ou digitar de forma mais direta, ex: 'Gastei 15 no almoço'.");
     } finally {
       setLoading(false);
     }
@@ -415,11 +422,11 @@ export default function VoiceAssistant({ darkMode, onTransactionAdded, onClose }
   };
 
   const quickExamples = [
-    { label: "💰 Recebi R$ 1.500 do João", text: "Recebi 1500 reais do cliente João", type: "receita" },
-    { label: "🍔 Gastei R$ 45,00 no almoço", text: "Gastei 45 reais no almoço hoje", type: "despesa" },
-    { label: "🛒 Mercado R$ 180,00", text: "Paguei 180 reais de compras no mercado", type: "despesa" },
-    { label: "🏢 Salário R$ 3.500,00", text: "Recebi 3500 reais de salário", type: "receita" },
-    { label: "🚗 Uber R$ 25,00", text: "Gastei 25 reais de Uber", type: "despesa" }
+    { label: `💰 Recebi ${activeSymbol} 1.500 do João`, text: `Recebi 1500 ${currency?.code === "BRL" ? "reais" : activeSymbol} do cliente João`, type: "receita" },
+    { label: `🍔 Gastei ${activeSymbol} 45,00 no almoço`, text: `Gastei 45 ${currency?.code === "BRL" ? "reais" : activeSymbol} no almoço hoje`, type: "despesa" },
+    { label: `🛒 Mercado ${activeSymbol} 180,00`, text: `Paguei 180 ${currency?.code === "BRL" ? "reais" : activeSymbol} de compras no mercado`, type: "despesa" },
+    { label: `🏢 Salário ${activeSymbol} 3.500,00`, text: `Recebi 3500 ${currency?.code === "BRL" ? "reais" : activeSymbol} de salário`, type: "receita" },
+    { label: `🚗 Transporte ${activeSymbol} 25,00`, text: `Gastei 25 ${currency?.code === "BRL" ? "reais" : activeSymbol} de transporte`, type: "despesa" }
   ];
 
   const activeRecording = isListening || isAudioRecording;
@@ -435,14 +442,17 @@ export default function VoiceAssistant({ darkMode, onTransactionAdded, onClose }
             <Sparkles className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h3 className="font-extrabold text-base tracking-tight flex items-center gap-1.5">
-              Kathleen Assistente de Voz
+            <div className="flex flex-wrap items-center gap-1.5">
+              <h3 className="font-extrabold text-base tracking-tight">Kathleen Assistente de Voz</h3>
               <span className="bg-purple-500/20 text-purple-400 text-[10px] font-bold px-2 py-0.5 rounded-full">
                 IA 3.7
               </span>
-            </h3>
+              <span className="bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                Moeda: {activeSymbol} ({currency?.code || "BRL"})
+              </span>
+            </div>
             <p className={`text-xs ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
-              Lançamento instantâneo de receitas e despesas
+              Lançamento instantâneo de receitas e despesas na moeda do perfil
             </p>
           </div>
         </div>
@@ -511,7 +521,7 @@ export default function VoiceAssistant({ darkMode, onTransactionAdded, onClose }
         <p className={`text-[11px] text-center max-w-[280px] font-medium ${
           darkMode ? "text-slate-400" : "text-slate-500"
         }`}>
-          Ex: "Recebi R$ 1.500 do João" ou "Gastei R$ 45 no almoço"
+          Ex: &quot;Recebi {activeSymbol} 1.500 do João&quot; ou &quot;Gastei {activeSymbol} 45 no almoço&quot;
         </p>
       </div>
 
@@ -558,7 +568,7 @@ export default function VoiceAssistant({ darkMode, onTransactionAdded, onClose }
             <div>
               <span className="text-[10px] text-slate-500 block">Valor</span>
               <strong className="text-sm font-black text-slate-900 dark:text-white">
-                R$ {Number(successData.amount).toFixed(2)}
+                {formatCurrency(Number(successData.amount) || 0, activeSymbol)}
               </strong>
             </div>
             <div>

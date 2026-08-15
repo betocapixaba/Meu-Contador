@@ -3,14 +3,17 @@ import { collection, addDoc } from "firebase/firestore";
 import { db, auth } from "../firebase";
 import { Camera, Upload, Check, AlertCircle, RefreshCw, X, FileText } from "lucide-react";
 import { isDemoActive, localAddDoc } from "../utils/demoDb";
+import { Currency, formatCurrency } from "../utils/currency";
 
 interface ReceiptScannerProps {
   darkMode: boolean;
   onTransactionAdded: () => void;
   onClose?: () => void;
+  currency?: Currency;
 }
 
-export default function ReceiptScanner({ darkMode, onTransactionAdded, onClose }: ReceiptScannerProps) {
+export default function ReceiptScanner({ darkMode, onTransactionAdded, onClose, currency }: ReceiptScannerProps) {
+  const activeSymbol = currency?.symbol || "R$";
   const [loading, setLoading] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [successData, setSuccessData] = useState<any | null>(null);
@@ -51,7 +54,10 @@ export default function ReceiptScanner({ darkMode, onTransactionAdded, onClose }
         const response = await fetch("/api/scan-receipt", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ imageBase64: imagePreview })
+          body: JSON.stringify({ 
+            imageBase64: imagePreview,
+            currency: currency || { code: "BRL", symbol: "R$", name: "Real brasileiro (R$)" }
+          })
         });
 
         if (response.ok) {
@@ -85,6 +91,7 @@ export default function ReceiptScanner({ darkMode, onTransactionAdded, onClose }
           userId: currentUser.uid,
           type: "despesa",
           amount: Number(parsedData.amount) || 0,
+          currency: currency?.code || "BRL",
           category: parsedData.category || "Compras",
           location: parsedData.location || "Recibo Escaneado",
           client: null,
@@ -243,7 +250,7 @@ export default function ReceiptScanner({ darkMode, onTransactionAdded, onClose }
             <span className="font-bold text-sm">Recibo Cadastrado com Sucesso!</span>
           </div>
           <div className="space-y-1 text-xs">
-            <p><strong className={darkMode ? "text-white" : "text-gray-800"}>Valor:</strong> ${successData.amount}</p>
+            <p><strong className={darkMode ? "text-white" : "text-gray-800"}>Valor:</strong> {formatCurrency(Number(successData.amount) || 0, activeSymbol)}</p>
             <p><strong className={darkMode ? "text-white" : "text-gray-800"}>Categoria:</strong> {successData.category}</p>
             {successData.location && (
               <p><strong className={darkMode ? "text-white" : "text-gray-800"}>Local:</strong> {successData.location}</p>
