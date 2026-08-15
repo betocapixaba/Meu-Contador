@@ -69,7 +69,10 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>("Todas");
   const [usdBrlRate, setUsdBrlRate] = useState<number>(5.65);
   const [lastUpdated, setLastUpdated] = useState<string>("");
-  const [sourceInfo, setSourceInfo] = useState<string>("");
+  const [sourceInfo, setSourceInfo] = useState<string>("Tempo Real (WebSocket)");
+  const [wsConnected, setWsConnected] = useState<boolean>(false);
+  const [liveTicksCount, setLiveTicksCount] = useState<number>(0);
+  const [priceDirections, setPriceDirections] = useState<Record<string, "up" | "down">>({});
 
   // Chart Modal state
   const [selectedCoin, setSelectedCoin] = useState<CommodityItem | null>(null);
@@ -80,8 +83,26 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
   const [loadingChart, setLoadingChart] = useState(false);
   const [comparisonMode, setComparisonMode] = useState<"percentage" | "absolute">("percentage");
 
+  const COMMODITY_PAIRS: Record<string, string> = {
+    BTC: "BTCUSDT",
+    ETH: "ETHUSDT",
+    SOL: "SOLUSDT",
+    XRP: "XRPUSDT",
+    ADA: "ADAUSDT",
+    DOGE: "DOGEUSDT",
+    SHIB: "SHIBUSDT",
+    AVAX: "AVAXUSDT",
+    LINK: "LINKUSDT",
+    DOT: "DOTUSDT",
+    LTC: "LTCUSDT",
+    BCH: "BCHUSDT",
+    XLM: "XLMUSDT",
+    HBAR: "HBARUSDT",
+    XTZ: "XTZUSDT",
+    APT: "APTUSDT"
+  };
+
   const fetchCommoditiesData = async () => {
-    setLoading(true);
     try {
       // 1. Try backend server endpoint
       const res = await fetch(`/api/crypto-rates?t=${Date.now()}`);
@@ -91,7 +112,9 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
           setItems(data.items);
           if (data.usdBrlRate) setUsdBrlRate(data.usdBrlRate);
           setLastUpdated(data.timestamp || new Date().toLocaleTimeString("pt-BR"));
-          setSourceInfo(data.source || "Tempo Real");
+          if (!wsConnected) {
+            setSourceInfo(data.source || "Mercado Spot");
+          }
 
           setSelectedCoin(prev => {
             if (!prev) return null;
@@ -142,11 +165,140 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
 
       setItems(fallbackList);
       setLastUpdated(new Date().toLocaleTimeString("pt-BR"));
-      setSourceInfo("Mercado Spot");
     } finally {
       setLoading(false);
     }
   };
+
+  // Real-Time WebSocket Connection to Binance MiniTicker Stream
+  useEffect(() => {
+    let ws: WebSocket | null = null;
+    let reconnectTimeout: any = null;
+    let isDestroyed = false;
+
+    const connectWebSocket = () => {
+      try {
+        // Binance public ticker array stream
+        const wsUrl = "wss://stream.binance.com:9443/ws/!miniTicker@arr";
+        ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+          if (!isDestroyed) {
+            setWsConnected(true);
+            setSourceInfo("Binance WebSocket (Ao Vivo)");
+          }
+        };
+
+        ws.onmessage = (event) => {
+          if (isDestroyed) return;
+          try {
+            const rawData = JSON.parse(event.data);
+            if (Array.isArray(rawData) && rawData.length > 0) {
+              const nowTime = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+              setLastUpdated(nowTime);
+              setLiveTicksCount(c => c + 1);
+
+              setItems(prevItems => {
+                if (prevItems.length === 0) return prevItems;
+                let changed = false;
+                const newDirections: Record<string, "up" | "down"> = {};
+
+                const updated = prevItems.map(item => {
+                  const pair = COMMODITY_PAIRS[item.symbol];
+                  if (!pair) return item;
+
+                  const ticker = rawData.find((t: any) => t.s === pair);
+                  if (ticker && ticker.c) {
+                    const newPriceUsd = parseFloat(ticker.c);
+                    const openPrice = parseFloat(ticker.o);
+                    const highPrice = parseFloat(ticker.h);
+                    const lowPrice = parseFloat(ticker.l);
+                    const quoteVolume = parseFloat(ticker.q);
+                    const change24h = openPrice > 0 ? ((newPriceUsd - openPrice) / openPrice) * 100 : item.change24h;
+
+                    if (newPriceUsd > 0 && Math.abs(newPriceUsd - item.priceUsd) > 0.0000001) {
+                      changed = true;
+                      newDirections[item.symbol] = newPriceUsd > item.priceUsd ? "up" : "down";
+
+                      return {
+                        ...item,
+                        priceUsd: newPriceUsd,
+                        priceBrl: newPriceUsd * usdBrlRate,
+                        change24h: isNaN(change24h) ? item.change24h : change24h,
+                        high24hUsd: highPrice > 0 ? highPrice : item.high24hUsd,
+                        low24hUsd: lowPrice > 0 ? lowPrice : item.low24hUsd,
+                        volume24hUsd: quoteVolume > 0 ? quoteVolume : item.volume24hUsd
+                      };
+                    }
+                  }
+                  return item;
+                });
+
+                if (Object.keys(newDirections).length > 0) {
+                  setPriceDirections(prev => ({ ...prev, ...newDirections }));
+                  setTimeout(() => {
+                    if (!isDestroyed) {
+                      setPriceDirections(prev => {
+                        const copy = { ...prev };
+                        Object.keys(newDirections).forEach(k => delete copy[k]);
+                        return copy;
+                      });
+                    }
+                  }, 1200);
+                }
+
+                if (changed) {
+                  // Sync selected modal coin if open
+                  setSelectedCoin(prev => {
+                    if (!prev) return null;
+                    const match = updated.find(i => i.symbol === prev.symbol);
+                    return match || prev;
+                  });
+                  setCompareCoin(prev => {
+                    if (!prev) return null;
+                    const match = updated.find(i => i.symbol === prev.symbol);
+                    return match || prev;
+                  });
+                }
+
+                return changed ? updated : prevItems;
+              });
+            }
+          } catch (e) {
+            console.warn("WebSocket parse error:", e);
+          }
+        };
+
+        ws.onerror = (err) => {
+          console.warn("WebSocket error, fallback to fast poll:", err);
+          setWsConnected(false);
+        };
+
+        ws.onclose = () => {
+          if (!isDestroyed) {
+            setWsConnected(false);
+            // Reconnect after 3 seconds
+            reconnectTimeout = setTimeout(connectWebSocket, 3000);
+          }
+        };
+      } catch (err) {
+        console.warn("Could not initiate WebSocket:", err);
+        setWsConnected(false);
+      }
+    };
+
+    connectWebSocket();
+
+    return () => {
+      isDestroyed = true;
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (ws) {
+        try {
+          ws.close();
+        } catch (e) {}
+      }
+    };
+  }, [usdBrlRate]);
 
   const getChartPointsForCoin = async (coin: CommodityItem, period: PeriodType): Promise<ChartPoint[]> => {
     const targetUsd = coin.priceUsd;
@@ -480,9 +632,26 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
           darkMode ? "border-slate-800 text-slate-400" : "border-purple-100 text-slate-600"
         }`}>
           <div className="flex items-center gap-3 flex-wrap text-[11px]">
+            <span className="flex items-center gap-1.5 font-medium">
+              <span className="flex h-2 w-2 relative">
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${wsConnected ? "bg-emerald-400" : "bg-amber-400"}`}></span>
+                <span className={`relative inline-flex rounded-full h-2 w-2 ${wsConnected ? "bg-emerald-500" : "bg-amber-500"}`}></span>
+              </span>
+              <span className={`font-bold ${wsConnected ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>
+                {wsConnected ? "Stream Ao Vivo (WebSocket)" : "Sincronização Contínua"}
+              </span>
+            </span>
+            <span className="hidden sm:inline">•</span>
             <span className="flex items-center gap-1">
               <Clock className="w-3.5 h-3.5 text-purple-500" />
-              Última atualização: <strong className="font-mono">{lastUpdated || "--:--:--"}</strong>
+              Último tick: <strong className="font-mono">{lastUpdated || "--:--:--"}</strong>
+              {liveTicksCount > 0 && (
+                <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono font-bold ${
+                  darkMode ? "bg-purple-900/50 text-purple-300" : "bg-purple-100 text-purple-700"
+                }`}>
+                  {liveTicksCount} ticks
+                </span>
+              )}
             </span>
             <span className="hidden sm:inline">•</span>
             <span className="flex items-center gap-1">
@@ -575,15 +744,20 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
             const colors = coinColors[item.symbol] || { bg: "bg-purple-500/10", text: "text-purple-500", badge: "border-purple-500/30" };
             const isPositive = item.change24h >= 0;
             const priceToDisplay = displayCurrency === "BRL" ? item.priceBrl : item.priceUsd;
+            const dir = priceDirections[item.symbol];
 
             return (
               <div 
                 key={item.symbol}
                 onClick={() => setSelectedCoin(item)}
-                className={`p-4 rounded-2xl border transition-all duration-200 cursor-pointer group hover:-translate-y-1 hover:shadow-lg relative overflow-hidden ${
-                  darkMode 
-                    ? "bg-slate-900/90 border-slate-800 text-white hover:border-purple-500/50" 
-                    : "bg-white border-slate-200/80 text-slate-900 shadow-2xs hover:border-purple-300"
+                className={`p-4 rounded-2xl border transition-all duration-300 cursor-pointer group hover:-translate-y-1 hover:shadow-lg relative overflow-hidden ${
+                  dir === "up"
+                    ? "ring-2 ring-emerald-500/50 bg-emerald-500/10 dark:bg-emerald-950/30"
+                    : dir === "down"
+                      ? "ring-2 ring-rose-500/50 bg-rose-500/10 dark:bg-rose-950/30"
+                      : darkMode 
+                        ? "bg-slate-900/90 border-slate-800 text-white hover:border-purple-500/50" 
+                        : "bg-white border-slate-200/80 text-slate-900 shadow-2xs hover:border-purple-300"
                 }`}
               >
                 {/* Click indicator hint */}
@@ -598,9 +772,14 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
                       {item.symbol.substring(0, 3)}
                     </div>
                     <div>
-                      <h3 className="font-extrabold text-sm tracking-tight leading-none group-hover:text-purple-600 dark:group-hover:text-purple-400 transition">
-                        {item.name}
-                      </h3>
+                      <div className="flex items-center gap-1.5">
+                        <h3 className="font-extrabold text-sm tracking-tight leading-none group-hover:text-purple-600 dark:group-hover:text-purple-400 transition">
+                          {item.name}
+                        </h3>
+                        {wsConnected && (
+                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" title="Ao vivo" />
+                        )}
+                      </div>
                       <span className={`text-[10px] font-mono uppercase tracking-wider font-bold block mt-1 ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
                         {item.symbol}
                       </span>
@@ -620,10 +799,25 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
 
                 {/* Price Display */}
                 <div className="mt-2 mb-3">
-                  <span className={`text-[10px] uppercase font-extrabold tracking-wider ${darkMode ? "text-slate-500" : "text-slate-400"}`}>
-                    Cotação Atual ({displayCurrency})
-                  </span>
-                  <div className="text-xl font-black font-mono tracking-tight text-slate-900 dark:text-white mt-0.5">
+                  <div className="flex items-center justify-between">
+                    <span className={`text-[10px] uppercase font-extrabold tracking-wider ${darkMode ? "text-slate-500" : "text-slate-400"}`}>
+                      Cotação Atual ({displayCurrency})
+                    </span>
+                    {dir && (
+                      <span className={`text-[10px] font-mono font-extrabold px-1.5 py-0.2 rounded transition-all animate-bounce ${
+                        dir === "up" ? "bg-emerald-500 text-white" : "bg-rose-500 text-white"
+                      }`}>
+                        {dir === "up" ? "▲ TICK" : "▼ TICK"}
+                      </span>
+                    )}
+                  </div>
+                  <div className={`text-xl font-black font-mono tracking-tight transition-colors duration-300 mt-0.5 ${
+                    dir === "up" 
+                      ? "text-emerald-500 dark:text-emerald-400" 
+                      : dir === "down" 
+                        ? "text-rose-500 dark:text-rose-400" 
+                        : "text-slate-900 dark:text-white"
+                  }`}>
                     {formatPrice(priceToDisplay, displayCurrency)}
                   </div>
                   {displayCurrency === "BRL" && (
@@ -673,7 +867,13 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
                     </h2>
                   </div>
                   <div className="flex items-center gap-2 text-xs mt-0.5">
-                    <span className={`font-mono font-bold text-base ${darkMode ? "text-white" : "text-slate-900"}`}>
+                    <span className={`font-mono font-bold text-base transition-colors ${
+                      priceDirections[selectedCoin.symbol] === "up"
+                        ? "text-emerald-500"
+                        : priceDirections[selectedCoin.symbol] === "down"
+                          ? "text-rose-500"
+                          : darkMode ? "text-white" : "text-slate-900"
+                    }`}>
                       {formatPrice(displayCurrency === "BRL" ? selectedCoin.priceBrl : selectedCoin.priceUsd, displayCurrency)}
                     </span>
                     <span className={`px-2 py-0.5 rounded text-[11px] font-bold font-mono ${
@@ -683,6 +883,12 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
                     }`}>
                       {selectedCoin.change24h >= 0 ? `+${selectedCoin.change24h.toFixed(2)}% (24h)` : `${selectedCoin.change24h.toFixed(2)}% (24h)`}
                     </span>
+                    {wsConnected && (
+                      <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                        Ao Vivo (WebSocket)
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
