@@ -138,6 +138,17 @@ export default function Insights({ darkMode, balance, totalIncome, totalExpense,
     }
   }, [transactions.length]);
 
+  // Listen to app-refresh global event
+  useEffect(() => {
+    const handleAppRefresh = () => {
+      fetchAnalysis();
+    };
+    window.addEventListener("app-refresh", handleAppRefresh);
+    return () => {
+      window.removeEventListener("app-refresh", handleAppRefresh);
+    };
+  }, [transactions, goals, balance, totalIncome, totalExpense]);
+
   return (
     <div className={`p-5 rounded-3xl border transition-all duration-300 ${
       darkMode 

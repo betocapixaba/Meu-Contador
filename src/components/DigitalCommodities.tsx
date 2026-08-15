@@ -116,22 +116,22 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
     // Direct fallback if server fails
     try {
       const fallbackList = [
-        { symbol: "BTC", name: "Bitcoin", category: "Reserva de Valor / Ouro Digital", priceUsd: 95450, change24h: 2.15 },
-        { symbol: "ETH", name: "Ethereum Ether", category: "Contratos Inteligentes", priceUsd: 2680, change24h: 1.84 },
-        { symbol: "SOL", name: "Solana", category: "High Performance L1", priceUsd: 198.50, change24h: 4.12 },
-        { symbol: "XRP", name: "XRP", category: "Liquidez e Remessas", priceUsd: 2.45, change24h: -0.85 },
-        { symbol: "ADA", name: "Cardano", category: "Proof of Stake L1", priceUsd: 0.82, change24h: 1.05 },
-        { symbol: "DOGE", name: "Dogecoin", category: "Ativo Memético / P2P", priceUsd: 0.26, change24h: 3.40 },
-        { symbol: "SHIB", name: "Shiba Inu", category: "Ecossistema Memético / L2", priceUsd: 0.0000245, change24h: 1.20 },
-        { symbol: "AVAX", name: "Avalanche", category: "Subredes & DeFi", priceUsd: 34.20, change24h: 0.95 },
-        { symbol: "LINK", name: "Chainlink", category: "Oráculos de Dados", priceUsd: 18.60, change24h: 2.30 },
-        { symbol: "DOT", name: "Polkadot", category: "Interoperabilidade Multichain", priceUsd: 7.85, change24h: -1.10 },
-        { symbol: "LTC", name: "Litecoin", category: "Pagamentos Rápidos / Prata Digital", priceUsd: 112.40, change24h: 0.50 },
-        { symbol: "BCH", name: "Bitcoin Cash", category: "Dinheiro Eletrônico P2P", priceUsd: 445.00, change24h: 1.75 },
-        { symbol: "XLM", name: "Stellar", category: "Rede de Pagamentos Globais", priceUsd: 0.38, change24h: -0.40 },
-        { symbol: "HBAR", name: "Hedera", category: "Hashgraph Enterprise", priceUsd: 0.22, change24h: 5.80 },
-        { symbol: "XTZ", name: "Tezos", category: "Self-Amending L1", priceUsd: 1.15, change24h: 0.20 },
-        { symbol: "APT", name: "Aptos", category: "Move-Based L1", priceUsd: 9.80, change24h: 3.10 }
+        { symbol: "BTC", name: "Bitcoin", category: "Reserva de Valor / Ouro Digital", priceUsd: 63000, change24h: -0.79 },
+        { symbol: "ETH", name: "Ethereum Ether", category: "Contratos Inteligentes", priceUsd: 1882, change24h: -0.24 },
+        { symbol: "SOL", name: "Solana", category: "High Performance L1", priceUsd: 75.35, change24h: -0.91 },
+        { symbol: "XRP", name: "XRP", category: "Liquidez e Remessas", priceUsd: 1.00, change24h: -1.05 },
+        { symbol: "ADA", name: "Cardano", category: "Proof of Stake L1", priceUsd: 0.18, change24h: -1.70 },
+        { symbol: "DOGE", name: "Dogecoin", category: "Ativo Memético / P2P", priceUsd: 0.070, change24h: -0.11 },
+        { symbol: "SHIB", name: "Shiba Inu", category: "Ecossistema Memético / L2", priceUsd: 0.0000046, change24h: 2.68 },
+        { symbol: "AVAX", name: "Avalanche", category: "Subredes & DeFi", priceUsd: 6.49, change24h: 0.57 },
+        { symbol: "LINK", name: "Chainlink", category: "Oráculos de Dados", priceUsd: 9.15, change24h: 3.12 },
+        { symbol: "DOT", name: "Polkadot", category: "Interoperabilidade Multichain", priceUsd: 0.766, change24h: -0.39 },
+        { symbol: "LTC", name: "Litecoin", category: "Pagamentos Rápidos / Prata Digital", priceUsd: 43.65, change24h: -2.39 },
+        { symbol: "BCH", name: "Bitcoin Cash", category: "Dinheiro Eletrônico P2P", priceUsd: 205.50, change24h: -0.48 },
+        { symbol: "XLM", name: "Stellar", category: "Rede de Pagamentos Globais", priceUsd: 0.158, change24h: -0.93 },
+        { symbol: "HBAR", name: "Hedera", category: "Hashgraph Enterprise", priceUsd: 0.066, change24h: 0.72 },
+        { symbol: "XTZ", name: "Tezos", category: "Self-Amending L1", priceUsd: 0.196, change24h: 0.00 },
+        { symbol: "APT", name: "Aptos", category: "Move-Based L1", priceUsd: 0.546, change24h: -0.91 }
       ].map(c => ({
         ...c,
         priceBrl: c.priceUsd * 5.65,

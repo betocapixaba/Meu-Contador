@@ -202,6 +202,16 @@ export default function AiAgent({ darkMode, onTransactionAdded, currency, transa
     }
 
     const numbers = lower.match(/(?:r\$\s*|\$\s*)?(\d+(?:\.\d{3})*(?:,\d{1,2})?|\d+(?:\.\d+)?)/gi);
+    // Helper: Convert Portuguese words to number
+    const wordValues: Record<string, number> = {
+      "cem": 100, "cento": 100, "duzentos": 200, "trezentos": 300, "quatrocentos": 400,
+      "quinhentos": 500, "seiscentos": 600, "setecentos": 700, "oitocentos": 800, "novecentos": 900,
+      "mil": 1000, "dois mil": 2000, "três mil": 3000, "tres mil": 3000, "quatro mil": 4000, "cinco mil": 5000, "dez mil": 10000,
+      "vinte": 20, "trinta": 30, "quarenta": 40, "cinquenta": 50, "sessenta": 60, "setenta": 70, "oitenta": 80, "noventa": 90,
+      "dez": 10, "onze": 11, "doze": 12, "treze": 13, "quatorze": 14, "quinze": 15, "dezesseis": 16, "dezessete": 17, "dezoito": 18, "dezenove": 19,
+      "um": 1, "dois": 2, "três": 3, "tres": 3, "quatro": 4, "cinco": 5, "seis": 6, "sete": 7, "oito": 8, "nove": 9
+    };
+
     let amount = 0;
     if (numbers) {
       for (const numStr of numbers) {
@@ -213,6 +223,15 @@ export default function AiAgent({ darkMode, onTransactionAdded, currency, transa
         }
         const val = parseFloat(cleaned);
         if (!isNaN(val) && val > 0 && val !== new Date().getFullYear()) {
+          amount = val;
+          break;
+        }
+      }
+    }
+
+    if (amount === 0) {
+      for (const [w, val] of Object.entries(wordValues)) {
+        if (lower.includes(w + " reais") || lower.includes(w + " contos") || lower.includes(w + " dólares") || lower.includes(w + " mangos")) {
           amount = val;
           break;
         }

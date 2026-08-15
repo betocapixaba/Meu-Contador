@@ -263,10 +263,17 @@ export default function App() {
 
   // Sync / Fetch data
   const fetchData = async () => {
-    if (!user) return;
+    const isDemo = isDemoActive() || localStorage.getItem("contador_ia_demo_mode") === "true";
+    const activeUser = user || auth.currentUser || (isDemo ? { uid: "local-demo-user" } : null);
+    
+    if (!activeUser) {
+      setDataLoading(false);
+      return;
+    }
+
     setDataLoading(true);
     try {
-      if (user.uid === "local-demo-user") {
+      if (activeUser.uid === "local-demo-user" || isDemo) {
         seedInitialDemoData();
         const localTransactions = localStorage.getItem("demo_transactions");
         const localGoals = localStorage.getItem("demo_goals");
@@ -285,14 +292,13 @@ export default function App() {
         setTransactions(tList);
         setGoals(gList);
         setRecurrentExpenses(rList);
-        setDataLoading(false);
         return;
       }
 
       // 1. Transactions realtime / initial fetch
       const tQuery = query(
         collection(db, "transactions"), 
-        where("userId", "==", user.uid)
+        where("userId", "==", activeUser.uid)
       );
       
       const tSnap = await getDocs(tQuery);
@@ -312,7 +318,7 @@ export default function App() {
       // 2. Goals
       const gQuery = query(
         collection(db, "goals"),
-        where("userId", "==", user.uid)
+        where("userId", "==", activeUser.uid)
       );
       const gSnap = await getDocs(gQuery);
       const gList = gSnap.docs.map(doc => ({
@@ -324,7 +330,7 @@ export default function App() {
       // 3. Recurrent Expenses
       const rQuery = query(
         collection(db, "recurrentExpenses"),
-        where("userId", "==", user.uid)
+        where("userId", "==", activeUser.uid)
       );
       const rSnap = await getDocs(rQuery);
       const rList = rSnap.docs.map(doc => ({
@@ -333,7 +339,12 @@ export default function App() {
       } as RecurrentExpense));
       setRecurrentExpenses(rList);
     } catch (err) {
-      console.error("Error loading Firestore collections:", err);
+      console.warn("Error loading Firestore collections, attempting local demo fallback:", err);
+      if (isDemoActive()) {
+        const localTransactions = localStorage.getItem("demo_transactions");
+        const tList = localTransactions ? JSON.parse(localTransactions) : [];
+        setTransactions(tList);
+      }
     } finally {
       setDataLoading(false);
     }
@@ -343,11 +354,25 @@ export default function App() {
   const handleGlobalRefresh = async () => {
     setDataLoading(true);
     try {
-      await fetchData();
-      window.dispatchEvent(new CustomEvent("app-refresh"));
-      setToast({ message: "Dados e cotações atualizados com sucesso!", type: "success" });
+      // Sync currency from localStorage if changed elsewhere
+      const savedCurr = localStorage.getItem("contador_ia_currency");
+      if (savedCurr) {
+        try {
+          setCurrency(JSON.parse(savedCurr));
+        } catch (e) {}
+      }
+
+      // Trigger global event for child components (USD rates, Digital Commodities, AI Insights)
+      window.dispatchEvent(new CustomEvent("app-refresh", { detail: { timestamp: Date.now() } }));
+
+      // Fetch data with guaranteed minimum 500ms spinner feedback
+      const minSpinnerDelay = new Promise(resolve => setTimeout(resolve, 600));
+      await Promise.all([fetchData(), minSpinnerDelay]);
+
+      setToast({ message: "Dados, cotações e saldos atualizados com sucesso!", type: "success" });
     } catch (e) {
-      setToast({ message: "Erro ao atualizar dados.", type: "error" });
+      console.error("Global refresh error:", e);
+      setToast({ message: "Erro ao atualizar dados. Tente novamente.", type: "error" });
     } finally {
       setDataLoading(false);
     }
