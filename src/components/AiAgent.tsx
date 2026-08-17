@@ -22,7 +22,9 @@ import {
   History,
   ExternalLink,
   X,
-  Smartphone
+  Smartphone,
+  Loader2,
+  Radio
 } from "lucide-react";
 import { collection, addDoc } from "firebase/firestore";
 import { db, auth } from "../firebase";
@@ -31,6 +33,7 @@ import { Currency, formatCurrency } from "../utils/currency";
 import { Transaction } from "../types";
 import { normalizeCategory } from "../utils/categories";
 import { parseFinancialAmount } from "../utils/amountParser";
+import { getSupportedAudioMimeType, speakPortugueseText, unlockAudioPlayback } from "../utils/mobileAudio";
 
 interface AiAgentProps {
   darkMode: boolean;
@@ -62,6 +65,7 @@ export default function AiAgent({ darkMode, onTransactionAdded, currency, transa
   const activeSymbol = currency?.symbol || "R$";
   const [inputText, setInputText] = useState("");
   const [isListening, setIsListening] = useState(false);
+  const [isAudioRecording, setIsAudioRecording] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [micError, setMicError] = useState<string | null>(null);
   const [isIframe, setIsIframe] = useState(false);
@@ -93,6 +97,8 @@ export default function AiAgent({ darkMode, onTransactionAdded, currency, transa
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   // Detect iframe context
   useEffect(() => {
@@ -101,6 +107,15 @@ export default function AiAgent({ darkMode, onTransactionAdded, currency, transa
     } catch (e) {
       setIsIframe(true);
     }
+
+    return () => {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.abort(); } catch (e) {}
+      }
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+        try { mediaRecorderRef.current.stop(); } catch (e) {}
+      }
+    };
   }, []);
 
   // Scroll to bottom when messages update
@@ -109,11 +124,16 @@ export default function AiAgent({ darkMode, onTransactionAdded, currency, transa
   }, [messages, loading]);
 
   const toggleListening = async () => {
-    if (isListening) {
+    unlockAudioPlayback();
+    if (isListening || isAudioRecording) {
       if (recognitionRef.current) {
         try { recognitionRef.current.stop(); } catch (e) {}
       }
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+        try { mediaRecorderRef.current.stop(); } catch (e) {}
+      }
       setIsListening(false);
+      setIsAudioRecording(false);
       return;
     }
 
@@ -123,22 +143,8 @@ export default function AiAgent({ darkMode, onTransactionAdded, currency, transa
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-      setMicError("Reconhecimento de voz não suportado neste navegador. Use o Google Chrome no celular ou digite a mensagem.");
+      startAudioRecording();
       return;
-    }
-
-    // Explicitly request user media to trigger native Chrome microphone permission popup on Android/iOS
-    try {
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach(track => track.stop());
-      }
-    } catch (err: any) {
-      console.warn("getUserMedia permission warning:", err);
-      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-        setMicError("Acesso ao microfone negado no Chrome. Toque no ícone de configurações ao lado do endereço web do Chrome para permitir o microfone.");
-        return;
-      }
     }
 
     try {
@@ -179,11 +185,11 @@ export default function AiAgent({ darkMode, onTransactionAdded, currency, transa
         console.warn("Speech recognition error:", event.error);
         setIsListening(false);
         if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-          setMicError("Permissão de microfone negada ou bloqueada. Toque na barra de endereço do Chrome para permitir 'Microfone'.");
+          startAudioRecording();
         } else if (event.error === "no-speech") {
-          setTranscript("Nenhuma fala detectada. Tente novamente.");
+          setTranscript("Nenhuma fala detectada. Toque no microfone para tentar novamente.");
         } else if (event.error !== "aborted") {
-          setMicError(`Erro no microfone (${event.error}). Tente falar mais perto do celular ou digite a mensagem.`);
+          startAudioRecording();
         }
       };
 
@@ -197,9 +203,133 @@ export default function AiAgent({ darkMode, onTransactionAdded, currency, transa
       recognitionRef.current = recognition;
       recognition.start();
     } catch (e: any) {
-      console.error("Failed to start SpeechRecognition:", e);
+      console.warn("Speech recognition fallback to audio recording:", e);
       setIsListening(false);
-      setMicError("Erro ao iniciar microfone. Verifique as permissões do seu navegador.");
+      startAudioRecording();
+    }
+  };
+
+  // Cross-browser mobile audio recording fallback (iOS Safari, Android Chrome, etc.)
+  const startAudioRecording = async () => {
+    unlockAudioPlayback();
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setMicError("Microfone não disponível neste navegador. Digite sua mensagem no campo abaixo.");
+        return;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunksRef.current = [];
+
+      const supportedMime = getSupportedAudioMimeType();
+      const options: MediaRecorderOptions = supportedMime ? { mimeType: supportedMime } : {};
+
+      let mediaRecorder: MediaRecorder;
+      try {
+        mediaRecorder = new MediaRecorder(stream, options);
+      } catch (e) {
+        mediaRecorder = new MediaRecorder(stream);
+      }
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        stream.getTracks().forEach(track => track.stop());
+        setIsAudioRecording(false);
+        const recordedBlobType = mediaRecorder.mimeType || supportedMime || "audio/mp4";
+        const audioBlob = new Blob(audioChunksRef.current, { type: recordedBlobType });
+        if (audioBlob.size > 200) {
+          await processAgentAudioBlob(audioBlob);
+        } else {
+          setMicError("Áudio muito curto. Fale sua frase e toque no microfone novamente.");
+        }
+      };
+
+      mediaRecorderRef.current = mediaRecorder;
+      mediaRecorder.start();
+      setIsAudioRecording(true);
+      setMicError(null);
+      setTranscript("Gravando áudio com IA... Toque no botão vermelho ao terminar.");
+    } catch (err: any) {
+      console.error("Audio recording error in AiAgent:", err);
+      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+        setMicError("Permissão de microfone negada. Permita o microfone no navegador ou digite o texto.");
+      } else {
+        setMicError("Não foi possível acessar o microfone do celular. Digite sua frase abaixo.");
+      }
+    }
+  };
+
+  const processAgentAudioBlob = async (blob: Blob) => {
+    setLoading(true);
+    setMicError(null);
+    try {
+      const reader = new FileReader();
+      reader.readAsDataURL(blob);
+      reader.onloadend = async () => {
+        const base64Data = reader.result as string;
+        const response = await fetch("/api/parse-audio", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            audioBase64: base64Data,
+            mimeType: blob.type || "audio/mp4",
+            currentDate: new Date().toISOString(),
+            currency: currency || { code: "BRL", symbol: "R$", name: "Real brasileiro (R$)" }
+          })
+        });
+
+        if (response.ok) {
+          const parsed = await response.json();
+          if (parsed.transcript) {
+            setTranscript(parsed.transcript);
+            setInputText(parsed.transcript);
+            // Add user message to thread
+            const userMsg: AgentMessage = {
+              id: "usr-" + Date.now(),
+              sender: "user",
+              text: parsed.transcript,
+              timestamp: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+            };
+            setMessages(prev => [...prev, userMsg]);
+          }
+
+          const agentMsgId = "agt-" + Date.now();
+          if (parsed.intent === "chat" || !parsed.type || parsed.amount === undefined) {
+            const agentMsg: AgentMessage = {
+              id: agentMsgId,
+              sender: "agent",
+              text: parsed.reply || "Olá! Como posso ajudar nas suas finanças hoje?",
+              timestamp: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+            };
+            setMessages(prev => [...prev, agentMsg]);
+            speakPortugueseText(agentMsg.text);
+          } else {
+            const isRevenue = parsed.type === "receita";
+            const agentMsg: AgentMessage = {
+              id: agentMsgId,
+              sender: "agent",
+              text: parsed.reply || `Entendi! Identifiquei uma ${isRevenue ? "ENTRADA (Receita)" : "SAÍDA (Despesa)"} no valor de ${formatCurrency(parsed.amount || 0, activeSymbol)}. Confirme os dados abaixo para lançar no sistema:`,
+              timestamp: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+              parsedData: parsed,
+              status: "pending"
+            };
+            setMessages(prev => [...prev, agentMsg]);
+            speakPortugueseText(agentMsg.text);
+          }
+        } else {
+          throw new Error("Erro ao processar áudio pela IA.");
+        }
+        setLoading(false);
+      };
+    } catch (err: any) {
+      console.error("Audio parse error:", err);
+      setMicError("Não conseguimos compreender o áudio falado. Tente novamente ou digite a frase.");
+      setLoading(false);
     }
   };
 
@@ -628,11 +758,17 @@ export default function AiAgent({ darkMode, onTransactionAdded, currency, transa
             </div>
           )}
 
-          {transcript && isListening && (
-            <div className={`p-2.5 rounded-xl text-xs italic mb-2 border ${
-              darkMode ? "bg-slate-950 border-slate-800 text-purple-300" : "bg-purple-50 border-purple-200 text-purple-800"
+          {transcript && (isListening || isAudioRecording) && (
+            <div className={`p-3 rounded-2xl text-xs mb-2 border flex items-center justify-between gap-2 animate-pulse ${
+              darkMode ? "bg-purple-950/40 border-purple-800 text-purple-200" : "bg-purple-50 border-purple-200 text-purple-900"
             }`}>
-              &quot;{transcript}&quot;
+              <div className="flex items-center gap-2">
+                <Radio className="w-4 h-4 text-purple-500 animate-spin" />
+                <span className="font-semibold">&quot;{transcript}&quot;</span>
+              </div>
+              <span className="text-[10px] uppercase font-bold bg-purple-500 text-white px-2 py-0.5 rounded-full">
+                Gravando
+              </span>
             </div>
           )}
 
@@ -645,7 +781,7 @@ export default function AiAgent({ darkMode, onTransactionAdded, currency, transa
           >
             <input
               type="text"
-              placeholder="Digite um comando: Ex: 'Recebi 500 do cliente Ana' ou 'Gastei 30 no mercado'"
+              placeholder="Digite ou fale: Ex: 'Recebi 500 do cliente Ana' ou 'Gastei 30 no almoço'"
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               disabled={loading}
@@ -658,15 +794,15 @@ export default function AiAgent({ darkMode, onTransactionAdded, currency, transa
               type="button"
               onClick={toggleListening}
               className={`p-3 rounded-2xl border transition active:scale-95 ${
-                isListening
-                  ? "bg-rose-600 border-rose-500 text-white animate-pulse"
+                isListening || isAudioRecording
+                  ? "bg-rose-600 border-rose-500 text-white animate-pulse shadow-lg shadow-rose-600/30"
                   : darkMode
                     ? "bg-slate-800 border-slate-700 text-purple-400 hover:bg-slate-700"
                     : "bg-purple-50 border-purple-200 text-purple-600 hover:bg-purple-100"
               }`}
-              title="Falar por voz"
+              title={isListening || isAudioRecording ? "Parar gravação" : "Falar com Kathleen por voz"}
             >
-              {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+              {isListening || isAudioRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
             </button>
 
             <button

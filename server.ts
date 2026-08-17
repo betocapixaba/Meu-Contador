@@ -820,12 +820,22 @@ app.post("/api/parse-audio", async (req, res) => {
   const activeCurrency = currency || { code: "BRL", symbol: "R$", name: "Real brasileiro (R$)" };
 
   // Extract clean base64 data
-  const matches = audioBase64.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.+)$/);
+  const matches = audioBase64.match(/^data:([a-zA-Z0-9\/-]+(?:;[a-zA-Z0-9=.-]+)*);base64,(.+)$/);
   let cleanMime = mimeType;
   let base64Data = audioBase64;
   if (matches && matches.length === 3) {
     cleanMime = matches[1];
     base64Data = matches[2];
+  }
+
+  // Sanitize MIME type for Gemini (strip codec params e.g. audio/webm;codecs=opus -> audio/webm)
+  let normalizedMime = cleanMime.split(";")[0].trim().toLowerCase();
+  if (normalizedMime === "audio/m4a" || normalizedMime === "audio/x-m4a") {
+    normalizedMime = "audio/mp4";
+  } else if (normalizedMime === "audio/x-wav") {
+    normalizedMime = "audio/wav";
+  } else if (!normalizedMime.startsWith("audio/")) {
+    normalizedMime = "audio/mp4";
   }
 
   try {
@@ -857,14 +867,15 @@ Retorne APENAS o JSON no formato:
   "date": "YYYY-MM-DD",
   "isRecurrent": boolean,
   "confidence": número de 0 a 1
-}`;
+}
+`;
 
     const response = await ai.models.generateContent({
       model: "gemini-3.7-flash",
       contents: [
         {
           inlineData: {
-            mimeType: cleanMime,
+            mimeType: normalizedMime,
             data: base64Data
           }
         },

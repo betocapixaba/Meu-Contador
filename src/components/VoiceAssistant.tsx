@@ -18,12 +18,14 @@ import {
   DollarSign,
   Building,
   RotateCcw,
-  Loader2
+  Loader2,
+  Radio
 } from "lucide-react";
 import { isDemoActive, localAddDoc } from "../utils/demoDb";
 import { Currency, formatCurrency } from "../utils/currency";
 import { normalizeCategory } from "../utils/categories";
 import { parseFinancialAmount } from "../utils/amountParser";
+import { getSupportedAudioMimeType, speakPortugueseText, unlockAudioPlayback } from "../utils/mobileAudio";
 
 interface VoiceAssistantProps {
   darkMode: boolean;
@@ -72,44 +74,21 @@ export default function VoiceAssistant({ darkMode, onTransactionAdded, onClose, 
   }, []);
 
   const speakText = (text: string) => {
-    try {
-      if ("speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = "pt-BR";
-        utterance.rate = 1.05;
-        window.speechSynthesis.speak(utterance);
-      }
-    } catch (e) {
-      console.warn("Speech synthesis unavailable:", e);
-    }
+    speakPortugueseText(text);
   };
 
   const startListening = async () => {
+    unlockAudioPlayback();
     setError(null);
     setSuccessData(null);
     setTranscript("");
 
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
-    // Fallback directly to MediaRecorder audio streaming if SpeechRecognition is not present
+    // If SpeechRecognition is not present, directly start audio clip recording
     if (!SpeechRecognition) {
       startAudioClipRecording();
       return;
-    }
-
-    // Explicitly request user media to trigger permission popup
-    try {
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach(track => track.stop());
-      }
-    } catch (err: any) {
-      console.warn("getUserMedia permission warning:", err);
-      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-        setError("Acesso ao microfone negado. Toque no ícone de configurações/cadeado na barra do navegador para permitir o microfone.");
-        return;
-      }
     }
 
     try {
@@ -151,11 +130,11 @@ export default function VoiceAssistant({ darkMode, onTransactionAdded, onClose, 
         console.warn("Speech recognition error:", event.error);
         setIsListening(false);
         if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-          setError("Permissão de microfone negada. Toque na barra do navegador para permitir 'Microfone' ou digite sua frase abaixo.");
+          // Try falling back to MediaRecorder audio recording directly
+          startAudioClipRecording();
         } else if (event.error === "no-speech") {
-          setTranscript("Nenhuma fala detectada. Tente falar novamente.");
+          setTranscript("Nenhuma fala detectada. Toque no microfone e fale novamente.");
         } else if (event.error !== "aborted") {
-          // If speech recognition fails, try media recorder
           startAudioClipRecording();
         }
       };
@@ -170,7 +149,7 @@ export default function VoiceAssistant({ darkMode, onTransactionAdded, onClose, 
       recognitionRef.current = recognition;
       recognition.start();
     } catch (e: any) {
-      console.warn("Failed to start SpeechRecognition, switching to audio recorder:", e);
+      console.warn("SpeechRecognition start exception, switching to audio recorder:", e);
       setIsListening(false);
       startAudioClipRecording();
     }
@@ -187,20 +166,30 @@ export default function VoiceAssistant({ darkMode, onTransactionAdded, onClose, 
     }
   };
 
-  // Fallback MediaRecorder audio recording
+  // Robust Cross-Browser MediaRecorder audio recording (iOS Safari, Android Chrome, Samsung Internet)
   const startAudioClipRecording = async () => {
+    unlockAudioPlayback();
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setError("Gravação de áudio não suportada neste dispositivo. Por favor, use os exemplos rápidos ou digite o texto.");
+        setError("Gravação de áudio não suportada neste navegador. Digite sua frase ou use os botões rápidos abaixo.");
         return;
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioChunksRef.current = [];
-      const mediaRecorder = new MediaRecorder(stream);
+
+      const supportedMime = getSupportedAudioMimeType();
+      const options: MediaRecorderOptions = supportedMime ? { mimeType: supportedMime } : {};
+      
+      let mediaRecorder: MediaRecorder;
+      try {
+        mediaRecorder = new MediaRecorder(stream, options);
+      } catch (e) {
+        mediaRecorder = new MediaRecorder(stream);
+      }
       
       mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
+        if (event.data && event.data.size > 0) {
           audioChunksRef.current.push(event.data);
         }
       };
@@ -208,19 +197,27 @@ export default function VoiceAssistant({ darkMode, onTransactionAdded, onClose, 
       mediaRecorder.onstop = async () => {
         stream.getTracks().forEach(track => track.stop());
         setIsAudioRecording(false);
-        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-        if (audioBlob.size > 500) {
+        const recordedBlobType = mediaRecorder.mimeType || supportedMime || "audio/mp4";
+        const audioBlob = new Blob(audioChunksRef.current, { type: recordedBlobType });
+        if (audioBlob.size > 200) {
           await processAudioBlob(audioBlob);
+        } else {
+          setError("Áudio muito curto. Fale sua frase e toque novamente.");
         }
       };
 
       mediaRecorderRef.current = mediaRecorder;
       mediaRecorder.start();
       setIsAudioRecording(true);
-      setTranscript("Gravando áudio com IA Kathleen...");
+      setError(null);
+      setTranscript("Gravando com IA Kathleen... Fale agora e toque no botão vermelho ao terminar.");
     } catch (err: any) {
       console.error("Audio recording error:", err);
-      setError("Não foi possível acessar o microfone. Digite sua frase ou toque em um dos exemplos rápidos abaixo.");
+      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+        setError("Permissão de microfone negada. Toque no ícone de cadeado/configurações na barra do seu celular para permitir o microfone.");
+      } else {
+        setError("Não foi possível acessar o microfone do celular. Digite sua frase ou toque em um dos botões rápidos abaixo.");
+      }
     }
   };
 
@@ -237,7 +234,7 @@ export default function VoiceAssistant({ darkMode, onTransactionAdded, onClose, 
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             audioBase64: base64Data,
-            mimeType: blob.type || "audio/webm",
+            mimeType: blob.type || "audio/mp4",
             currentDate: new Date().toISOString(),
             currency: currency || { code: "BRL", symbol: "R$", name: "Real brasileiro (R$)" }
           })
