@@ -48,74 +48,20 @@ export default function App() {
   });
 
   // Offline persistence and network status tracking
-  const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== "undefined" ? navigator.onLine : true);
+  const [isOnline, setIsOnline] = useState<boolean>(true);
   const [hasPendingSync, setHasPendingSync] = useState(false);
   const [isFromCache, setIsFromCache] = useState(false);
 
   useEffect(() => {
-    // Verify actual connectivity with a fast ping to avoid false offline triggers
-    const verifyConnectivity = async () => {
-      if (typeof navigator !== "undefined" && !navigator.onLine) {
-        try {
-          const res = await fetch("/api/health", { method: "GET", cache: "no-store" });
-          if (res.ok) {
-            setIsOnline(true);
-            return;
-          }
-        } catch (e) {
-          setIsOnline(false);
-          return;
-        }
-      }
-      setIsOnline(typeof navigator !== "undefined" ? navigator.onLine : true);
-    };
-
-    verifyConnectivity();
-
-    const handleOnline = () => {
-      setIsOnline(true);
-      setToast({ message: "Conexão de internet restabelecida com sucesso!", type: "success" });
-    };
-
-    const handleOffline = async () => {
-      // Double check before marking as offline
-      try {
-        const res = await fetch("/api/health", { method: "GET", cache: "no-store" });
-        if (res.ok) {
-          setIsOnline(true);
-          return;
-        }
-      } catch (e) {
-        setIsOnline(false);
-        setToast({ message: "Você está sem sinal de internet (Offline). Suas transações serão salvas localmente e sincronizadas quando o sinal retornar.", type: "warning" });
-      }
-    };
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
 
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
 
-    // Periodic check every 30s only when marked offline to automatically detect connection recovery
-    const interval = setInterval(async () => {
-      if (typeof navigator !== "undefined") {
-        if (navigator.onLine) {
-          setIsOnline(true);
-        } else {
-          try {
-            const res = await fetch("/api/health", { method: "GET", cache: "no-store" });
-            if (res.ok) {
-              setIsOnline(true);
-            }
-          } catch (e) {
-            setIsOnline(false);
-          }
-        }
-      }
-    }, 30000);
-
     return () => {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
-      clearInterval(interval);
     };
   }, []);
 
@@ -829,27 +775,6 @@ export default function App() {
             </button>
           </div>
         </header>
-
-        {/* Offline Status Bar - Only displays when there is no internet connection */}
-        {!isOnline && (
-          <div className={`px-4 py-2 flex items-center justify-between text-xs transition-all shrink-0 border-b ${
-            darkMode
-              ? "bg-amber-950/60 border-amber-800/60 text-amber-300"
-              : "bg-amber-50 border-amber-200 text-amber-900"
-          }`}>
-            <div className="flex items-center gap-2">
-              <WifiOff className="w-4 h-4 shrink-0 text-amber-500 animate-pulse" />
-              <span className="text-[11px] font-medium leading-tight">
-                <strong>Sem sinal de internet (Offline):</strong> Suas transações estão sendo salvas no dispositivo e serão sincronizadas automaticamente assim que o sinal de internet retornar.
-              </span>
-            </div>
-            <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded-md shrink-0 uppercase tracking-wider ${
-              darkMode ? "bg-amber-500/20 text-amber-400" : "bg-amber-200/60 text-amber-900"
-            }`}>
-              Offline
-            </span>
-          </div>
-        )}
 
         {/* Quick Top Sub-Navigation Pills */}
         <div className={`px-4 py-2 border-b flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0 ${

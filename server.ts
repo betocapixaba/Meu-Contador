@@ -667,7 +667,8 @@ app.get("/api/health", (req, res) => {
 
 // 1. API: Parse voice command or text command
 app.post("/api/parse-command", async (req, res) => {
-  const { text, currentDate, transactionsSummary, currency } = req.body;
+  const text = req.body.text || req.body.command || req.body.prompt || req.body.message;
+  const { currentDate, transactionsSummary, currency } = req.body;
   if (!text) {
     res.status(400).json({ error: "O texto do comando é obrigatório." });
     return;
@@ -1546,42 +1547,54 @@ app.get("/api/crypto-chart", async (req, res) => {
   res.setHeader("Expires", "0");
 
   const symbol = ((req.query.symbol as string) || "BTC").toUpperCase();
-  const period = (req.query.period as string) || "1d"; // 1m, 1d, 1w, 1M, 1y
+  const period = (req.query.period as string) || "1h"; // 15m, 30m, 1h, 1w, 1M, 1y
   const pair = `${symbol}USDT`;
   const targetUsd = req.query.currentPriceUsd ? parseFloat(req.query.currentPriceUsd as string) : 0;
   const change24hParam = req.query.change24h ? parseFloat(req.query.change24h as string) : null;
 
-  // Determine interval & limit based on period
-  let interval = "1h";
-  let limit = 25;
+  // Determine interval & limit based on requested timeframe
+  let interval = "1m";
+  let limit = 60;
   let cgDays = "1";
   let dateFormatOptions: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit" };
+  let isTimeOnly = true;
 
-  if (period === "1m") {
+  if (period === "15m") {
     interval = "1m";
-    limit = 30; // 30 minutes window
+    limit = 15; // 15 1-minute candles
     cgDays = "1";
     dateFormatOptions = { hour: "2-digit", minute: "2-digit" };
-  } else if (period === "1d") {
-    interval = "1h";
-    limit = 25; // 25 points = 24 hours
+    isTimeOnly = true;
+  } else if (period === "30m") {
+    interval = "1m";
+    limit = 30; // 30 1-minute candles
     cgDays = "1";
     dateFormatOptions = { hour: "2-digit", minute: "2-digit" };
+    isTimeOnly = true;
+  } else if (period === "1h") {
+    interval = "1m";
+    limit = 60; // 60 1-minute candles
+    cgDays = "1";
+    dateFormatOptions = { hour: "2-digit", minute: "2-digit" };
+    isTimeOnly = true;
   } else if (period === "1w") {
     interval = "4h";
-    limit = 43; // 42 * 4h = 7 days
+    limit = 42; // 42 * 4h = 7 days
     cgDays = "7";
     dateFormatOptions = { weekday: "short", hour: "2-digit" };
+    isTimeOnly = false;
   } else if (period === "1M") {
     interval = "1d";
-    limit = 31; // 30 days
+    limit = 30; // 30 days
     cgDays = "30";
     dateFormatOptions = { day: "2-digit", month: "short" };
+    isTimeOnly = false;
   } else if (period === "1y") {
     interval = "1w";
-    limit = 53; // 52 weeks
+    limit = 52; // 52 weeks = 1 year
     cgDays = "365";
     dateFormatOptions = { month: "short", year: "2-digit" };
+    isTimeOnly = false;
   }
 
   // Live USD/BRL rate
@@ -1626,7 +1639,7 @@ app.get("/api/crypto-chart", async (req, res) => {
           const pUsd = rawPrice * scale;
 
           const dateObj = new Date(openTime);
-          const timeLabel = period === "1m" || period === "1d" 
+          const timeLabel = isTimeOnly 
             ? dateObj.toLocaleTimeString("pt-BR", dateFormatOptions) 
             : dateObj.toLocaleDateString("pt-BR", dateFormatOptions);
 
@@ -1646,21 +1659,6 @@ app.get("/api/crypto-chart", async (req, res) => {
           const lastIdx = rawPoints.length - 1;
           rawPoints[lastIdx].priceUsd = targetUsd;
           rawPoints[lastIdx].priceBrl = targetUsd * usdBrlRate;
-        }
-
-        // For 1d period, linearly detrend so point 0 matches exact 24h change percentage if provided
-        if (period === "1d" && change24hParam !== null && targetUsd > 0 && rawPoints.length > 1) {
-          const expectedStartUsd = targetUsd / (1 + (change24hParam / 100));
-          const currentStartUsd = rawPoints[0].priceUsd;
-          const deltaStart = expectedStartUsd - currentStartUsd;
-          const totalPoints = rawPoints.length - 1;
-
-          for (let i = 0; i < rawPoints.length; i++) {
-            const weight = (totalPoints - i) / totalPoints;
-            const adjustedUsd = rawPoints[i].priceUsd + (deltaStart * weight);
-            rawPoints[i].priceUsd = adjustedUsd;
-            rawPoints[i].priceBrl = adjustedUsd * usdBrlRate;
-          }
         }
 
         return res.json({
@@ -1697,7 +1695,7 @@ app.get("/api/crypto-chart", async (req, res) => {
         const rawPoints = sampled.map(([timeMs, priceRaw]) => {
           const pUsd = priceRaw * scale;
           const dateObj = new Date(timeMs);
-          const timeLabel = period === "1m" || period === "1d" 
+          const timeLabel = isTimeOnly 
             ? dateObj.toLocaleTimeString("pt-BR", dateFormatOptions) 
             : dateObj.toLocaleDateString("pt-BR", dateFormatOptions);
 
@@ -1754,20 +1752,7 @@ app.get("/api/crypto-chart", async (req, res) => {
   // Force last point = basePrice
   rawPricesUsd[limit - 1] = basePrice;
 
-  // For 1d, adjust start point to match change24h
-  if (period === "1d" && change24hParam !== null && basePrice > 0 && limit > 1) {
-    const expectedStartUsd = basePrice / (1 + (change24hParam / 100));
-    const currentStartUsd = rawPricesUsd[0];
-    const deltaStart = expectedStartUsd - currentStartUsd;
-    const totalP = limit - 1;
-
-    for (let i = 0; i < limit; i++) {
-      const weight = (totalP - i) / totalP;
-      rawPricesUsd[i] = rawPricesUsd[i] + (deltaStart * weight);
-    }
-  }
-
-  const stepMs = (period === "1m" ? 60000 : period === "1d" ? 3600000 : period === "1w" ? 14400000 : period === "1M" ? 86400000 : 604800000);
+  const stepMs = (period === "15m" || period === "30m" || period === "1h") ? 60000 : (period === "1w" ? 14400000 : (period === "1M" ? 86400000 : 604800000));
 
   for (let i = limit - 1; i >= 0; i--) {
     const tMs = nowMs - (i * stepMs);
@@ -1776,7 +1761,7 @@ app.get("/api/crypto-chart", async (req, res) => {
 
     points.push({
       timestamp: tMs,
-      timeLabel: period === "1m" || period === "1d" ? dateObj.toLocaleTimeString("pt-BR", dateFormatOptions) : dateObj.toLocaleDateString("pt-BR", dateFormatOptions),
+      timeLabel: isTimeOnly ? dateObj.toLocaleTimeString("pt-BR", dateFormatOptions) : dateObj.toLocaleDateString("pt-BR", dateFormatOptions),
       priceUsd: val,
       priceBrl: val * usdBrlRate,
       highUsd: val * 1.01,

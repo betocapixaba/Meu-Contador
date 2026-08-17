@@ -59,7 +59,7 @@ interface ChartPoint {
   volumeUsd: number;
 }
 
-type PeriodType = "1m" | "1d" | "1w" | "1M" | "1y";
+type PeriodType = "15m" | "30m" | "1h" | "1w" | "1M" | "1y";
 
 export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
   const [items, setItems] = useState<CommodityItem[]>([]);
@@ -78,7 +78,7 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
   // Chart Modal state
   const [selectedCoin, setSelectedCoin] = useState<CommodityItem | null>(null);
   const [compareCoin, setCompareCoin] = useState<CommodityItem | null>(null);
-  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>("1d");
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>("1h");
   const [chartData, setChartData] = useState<ChartPoint[]>([]);
   const [compareChartData, setCompareChartData] = useState<ChartPoint[]>([]);
   const [loadingChart, setLoadingChart] = useState(false);
@@ -333,13 +333,6 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
             rawPts[lastIdx].priceBrl = targetBrl > 0 ? targetBrl : targetUsd * conversionRatio;
           }
 
-          // For 1d period, guarantee first point matches exact 24h change
-          if (period === "1d" && rawPts.length > 1 && coin.change24h !== undefined && targetUsd > 0) {
-            const expectedStartUsd = targetUsd / (1 + (coin.change24h / 100));
-            rawPts[0].priceUsd = expectedStartUsd;
-            rawPts[0].priceBrl = expectedStartUsd * conversionRatio;
-          }
-
           return rawPts;
         }
       }
@@ -350,8 +343,8 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
     // Fallback chart points generator ending exactly at targetUsd / targetBrl
     const nowMs = Date.now();
     const pts: ChartPoint[] = [];
-    const count = period === "1m" ? 60 : period === "1d" ? 24 : period === "1w" ? 28 : period === "1M" ? 30 : 52;
-    const stepMs = (period === "1m" ? 60000 : period === "1d" ? 3600000 : period === "1w" ? 14400000 : period === "1M" ? 86400000 : 604800000);
+    const count = period === "15m" ? 15 : period === "30m" ? 30 : period === "1h" ? 60 : period === "1w" ? 28 : period === "1M" ? 30 : 52;
+    const stepMs = (period === "15m" || period === "30m" || period === "1h") ? 60000 : (period === "1w" ? 14400000 : (period === "1M" ? 86400000 : 604800000));
 
     const pricesUsd: number[] = [];
     let pUsd = targetUsd > 0 ? targetUsd : 100;
@@ -365,27 +358,20 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
     // Force last point = targetUsd
     pricesUsd[count - 1] = targetUsd;
 
-    if (period === "1d" && coin.change24h !== undefined && targetUsd > 0 && count > 1) {
-      const expectedStartUsd = targetUsd / (1 + (coin.change24h / 100));
-      const currentStartUsd = pricesUsd[0];
-      const deltaStart = expectedStartUsd - currentStartUsd;
-      const totalP = count - 1;
-
-      for (let i = 0; i < count; i++) {
-        const weight = (totalP - i) / totalP;
-        pricesUsd[i] = pricesUsd[i] + (deltaStart * weight);
-      }
-    }
-
     for (let i = count - 1; i >= 0; i--) {
       const tMs = nowMs - (i * stepMs);
       const dateObj = new Date(tMs);
       const curUsd = pricesUsd[count - 1 - i];
       const curBrl = curUsd * conversionRatio;
+      const isTimeOnly = period === "15m" || period === "30m" || period === "1h";
 
       pts.push({
         timestamp: tMs,
-        timeLabel: period === "1m" || period === "1d" ? dateObj.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : dateObj.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }),
+        timeLabel: isTimeOnly 
+          ? dateObj.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) 
+          : (period === "1y" 
+              ? dateObj.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" })
+              : dateObj.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })),
         priceUsd: curUsd,
         priceBrl: curBrl,
         highUsd: curUsd * 1.01,
@@ -415,7 +401,7 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
 
   useEffect(() => {
     fetchCommoditiesData();
-    const interval = setInterval(fetchCommoditiesData, 15000); // 15s auto-refresh
+    const interval = setInterval(fetchCommoditiesData, 8000); // 8s fast real-time poll fallback
 
     const handleAppRefresh = () => {
       fetchCommoditiesData();
@@ -434,16 +420,18 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
     }
   }, [selectedCoin?.symbol, selectedCoin?.priceUsd, compareCoin?.symbol, compareCoin?.priceUsd, selectedPeriod]);
 
-  // Format currency helper
+  // Format currency helper with 4 decimal places after the comma (crypto trading platform standard)
   const formatPrice = (value: number, currency: "BRL" | "USD") => {
     const symbol = currency === "BRL" ? "R$" : "$";
-    if (value < 0.001) {
-      return `${symbol} ${value.toFixed(7)}`;
+    if (value === undefined || value === null || isNaN(value)) {
+      return `${symbol} 0,0000`;
     }
-    if (value < 1) {
-      return `${symbol} ${value.toFixed(4)}`;
+    // For micro-value tokens (like SHIB) where 4 decimals would round to zero, preserve detailed decimals
+    if (value > 0 && value < 0.0001) {
+      return `${symbol} ${value.toLocaleString("pt-BR", { minimumFractionDigits: 6, maximumFractionDigits: 8 })}`;
     }
-    return `${symbol} ${value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    // Standard crypto trade standard: 4 decimal places after the comma
+    return `${symbol} ${value.toLocaleString("pt-BR", { minimumFractionDigits: 4, maximumFractionDigits: 4 })}`;
   };
 
   // Color map for coin symbols
@@ -471,8 +459,9 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
 
   // Periods options
   const periodsList: { id: PeriodType; label: string }[] = [
-    { id: "1m", label: "1 Minuto" },
-    { id: "1d", label: "1 Dia" },
+    { id: "15m", label: "15 Minutos" },
+    { id: "30m", label: "30 Minutos" },
+    { id: "1h", label: "1 Hora" },
     { id: "1w", label: "1 Semana" },
     { id: "1M", label: "1 Mês" },
     { id: "1y", label: "1 Ano" }
@@ -585,7 +574,7 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
                 </span>
               </div>
               <p className={`text-xs mt-0.5 ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
-                Clique em qualquer moeda para visualizar o gráfico completo de 1 minuto a 1 ano.
+                Clique em qualquer moeda para visualizar o gráfico completo de 15 minutos a 1 ano.
               </p>
             </div>
           </div>
@@ -675,7 +664,7 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
             <span className="hidden sm:inline">•</span>
             <span className="flex items-center gap-1">
               <DollarSign className="w-3.5 h-3.5 text-amber-500" />
-              Dólar Comercial: <strong className="font-mono font-bold">R$ {usdBrlRate.toFixed(2)}</strong>
+              Dólar Comercial: <strong className="font-mono font-bold">R$ {usdBrlRate.toLocaleString("pt-BR", { minimumFractionDigits: 4, maximumFractionDigits: 4 })}</strong>
             </span>
           </div>
 
@@ -1355,7 +1344,7 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
       }`}>
         <Info className="w-4 h-4 text-purple-500 shrink-0 mt-0.5" />
         <p className="leading-relaxed text-[11px]">
-          As <strong>16 Commodities Digitais</strong> acima possuem suporte a gráficos interativos completos de <strong>1 Minuto, 1 Dia, 1 Semana, 1 Mês e 1 Ano</strong> com dados históricos recuperados via Binance Klines em tempo real.
+          As <strong>16 Commodities Digitais</strong> acima possuem suporte a gráficos interativos completos de <strong>15 Minutos, 30 Minutos, 1 Hora, 1 Semana, 1 Mês e 1 Ano</strong> com dados históricos recuperados via Binance Klines em tempo real.
         </p>
       </div>
     </div>
