@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
-  signInAnonymously,
   updateProfile,
   sendPasswordResetEmail
 } from "firebase/auth";
@@ -90,28 +89,6 @@ export default function Auth({ darkMode, onDemoLogin }: AuthProps) {
         errorMsg = `Este domínio (${window.location.hostname}) não está autorizado no Console do Firebase.\n\nPara resolver:\n1. Acesse o Console do Firebase\n2. Vá em Authentication > Configurações > Domínios Autorizados\n3. Adicione o domínio "${window.location.hostname}"`;
       } else if (err.message) {
         errorMsg = err.message;
-      }
-      setError(errorMsg);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleGuestLogin = async () => {
-    setError(null);
-    setLoading(true);
-    try {
-      const userCredential = await signInAnonymously(auth);
-      await updateProfile(userCredential.user, { displayName: "Visitante" });
-    } catch (err: any) {
-      console.warn("Guest Auth error:", err.message || err);
-      let errorMsg = "Falha ao entrar como convidado.";
-      if (err.code === "auth/operation-not-allowed") {
-        errorMsg = "O Login de Convidado (Anônimo) não está ativado no Console do Firebase. Ative-o em 'Authentication > Sign-in method' > 'Anônimo' ou use o botão verde 'Acessar sem Login (Demonstração Local)'.";
-      } else if (err.code === "auth/unauthorized-domain") {
-        errorMsg = `Este domínio (${window.location.hostname}) não está autorizado no Console do Firebase. Adicione o domínio "${window.location.hostname}" em Authentication > Configurações > Domínios Autorizados.`;
-      } else if (err.message) {
-        errorMsg += ": " + err.message;
       }
       setError(errorMsg);
     } finally {
@@ -355,21 +332,6 @@ export default function Auth({ darkMode, onDemoLogin }: AuthProps) {
             >
               <Sparkles className="w-4 h-4 text-white animate-bounce" />
               Acessar sem Login (Demonstração Local)
-            </button>
-
-            {/* Demo Fast Entry */}
-            <button
-              id="auth-guest-btn"
-              type="button"
-              onClick={handleGuestLogin}
-              disabled={loading}
-              className={`w-full py-3 px-4 text-sm font-semibold rounded-xl flex items-center justify-center gap-2 border border-dashed transition active:scale-95 ${
-                darkMode 
-                  ? "border-slate-700 text-slate-300 hover:bg-slate-800" 
-                  : "border-slate-200 text-slate-600 hover:bg-slate-50"
-              }`}
-            >
-              Entrar como Convidado (Firebase)
             </button>
 
             <p className="text-center text-xs mt-6">

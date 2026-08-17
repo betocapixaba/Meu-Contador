@@ -53,21 +53,69 @@ export default function App() {
   const [isFromCache, setIsFromCache] = useState(false);
 
   useEffect(() => {
+    // Verify actual connectivity with a fast ping to avoid false offline triggers
+    const verifyConnectivity = async () => {
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        try {
+          const res = await fetch("/api/health", { method: "GET", cache: "no-store" });
+          if (res.ok) {
+            setIsOnline(true);
+            return;
+          }
+        } catch (e) {
+          setIsOnline(false);
+          return;
+        }
+      }
+      setIsOnline(typeof navigator !== "undefined" ? navigator.onLine : true);
+    };
+
+    verifyConnectivity();
+
     const handleOnline = () => {
       setIsOnline(true);
-      setToast({ message: "Conexão restabelecida! Sincronizando com Firestore...", type: "success" });
+      setToast({ message: "Conexão de internet restabelecida com sucesso!", type: "success" });
     };
-    const handleOffline = () => {
-      setIsOnline(false);
-      setToast({ message: "Você está offline. Suas transações serão salvas localmente e sincronizadas automaticamente.", type: "success" });
+
+    const handleOffline = async () => {
+      // Double check before marking as offline
+      try {
+        const res = await fetch("/api/health", { method: "GET", cache: "no-store" });
+        if (res.ok) {
+          setIsOnline(true);
+          return;
+        }
+      } catch (e) {
+        setIsOnline(false);
+        setToast({ message: "Você está sem sinal de internet (Offline). Suas transações serão salvas localmente e sincronizadas quando o sinal retornar.", type: "warning" });
+      }
     };
 
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
 
+    // Periodic check every 30s only when marked offline to automatically detect connection recovery
+    const interval = setInterval(async () => {
+      if (typeof navigator !== "undefined") {
+        if (navigator.onLine) {
+          setIsOnline(true);
+        } else {
+          try {
+            const res = await fetch("/api/health", { method: "GET", cache: "no-store" });
+            if (res.ok) {
+              setIsOnline(true);
+            }
+          } catch (e) {
+            setIsOnline(false);
+          }
+        }
+      }
+    }, 30000);
+
     return () => {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
+      clearInterval(interval);
     };
   }, []);
 
@@ -782,40 +830,23 @@ export default function App() {
           </div>
         </header>
 
-        {/* Offline / Auto-Sync Status Bar (Firestore Persistence) */}
-        {(!isOnline || hasPendingSync) && (
+        {/* Offline Status Bar - Only displays when there is no internet connection */}
+        {!isOnline && (
           <div className={`px-4 py-2 flex items-center justify-between text-xs transition-all shrink-0 border-b ${
-            !isOnline
-              ? darkMode
-                ? "bg-amber-950/60 border-amber-800/60 text-amber-300"
-                : "bg-amber-50 border-amber-200 text-amber-900"
-              : darkMode
-                ? "bg-indigo-950/60 border-indigo-800/60 text-indigo-300"
-                : "bg-indigo-50 border-indigo-200 text-indigo-900"
+            darkMode
+              ? "bg-amber-950/60 border-amber-800/60 text-amber-300"
+              : "bg-amber-50 border-amber-200 text-amber-900"
           }`}>
             <div className="flex items-center gap-2">
-              {!isOnline ? (
-                <>
-                  <WifiOff className="w-4 h-4 shrink-0 text-amber-500 animate-pulse" />
-                  <span className="text-[11px] font-medium leading-tight">
-                    <strong>Modo Offline:</strong> Transações salvas no dispositivo. Sincronização automática com Firestore ao reconectar.
-                  </span>
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="w-4 h-4 shrink-0 text-indigo-500 animate-spin" />
-                  <span className="text-[11px] font-medium leading-tight">
-                    Sincronizando transações pendentes com Cloud Firestore...
-                  </span>
-                </>
-              )}
+              <WifiOff className="w-4 h-4 shrink-0 text-amber-500 animate-pulse" />
+              <span className="text-[11px] font-medium leading-tight">
+                <strong>Sem sinal de internet (Offline):</strong> Suas transações estão sendo salvas no dispositivo e serão sincronizadas automaticamente assim que o sinal de internet retornar.
+              </span>
             </div>
             <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded-md shrink-0 uppercase tracking-wider ${
-              !isOnline
-                ? darkMode ? "bg-amber-500/20 text-amber-400" : "bg-amber-200/60 text-amber-900"
-                : darkMode ? "bg-indigo-500/20 text-indigo-400" : "bg-indigo-200/60 text-indigo-900"
+              darkMode ? "bg-amber-500/20 text-amber-400" : "bg-amber-200/60 text-amber-900"
             }`}>
-              {!isOnline ? "Offline" : "Sincronizando"}
+              Offline
             </span>
           </div>
         )}

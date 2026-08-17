@@ -42,7 +42,8 @@ import {
 import { 
   updateProfile, 
   updateEmail, 
-  updatePassword 
+  updatePassword,
+  signInAnonymously
 } from "firebase/auth";
 import { db, auth } from "../firebase";
 import { Goal, RecurrentExpense, Service, Client } from "../types";
@@ -382,6 +383,36 @@ export default function Profile({
       window.location.reload();
     } else {
       auth.signOut();
+    }
+  };
+
+  // Handles Guest (Anonymous) Firebase Login
+  const [guestLoading, setGuestLoading] = useState(false);
+  const [guestError, setGuestError] = useState<string | null>(null);
+
+  const handleGuestLogin = async () => {
+    setGuestError(null);
+    setGuestLoading(true);
+    try {
+      if (isDemo) {
+        localStorage.removeItem("contador_ia_demo_mode");
+      }
+      const userCredential = await signInAnonymously(auth);
+      await updateProfile(userCredential.user, { displayName: "Visitante Convidado" });
+      setFbUserUpdateTrigger(prev => prev + 1);
+    } catch (err: any) {
+      console.warn("Guest Auth error in Profile:", err.message || err);
+      let errorMsg = "Falha ao entrar como convidado.";
+      if (err.code === "auth/operation-not-allowed") {
+        errorMsg = "O Login de Convidado (Anônimo) não está ativado no Console do Firebase. Ative-o em 'Authentication > Sign-in method' > 'Anônimo'.";
+      } else if (err.code === "auth/unauthorized-domain") {
+        errorMsg = `Este domínio (${window.location.hostname}) não está autorizado no Console do Firebase. Adicione o domínio "${window.location.hostname}" em Authentication > Configurações > Domínios Autorizados.`;
+      } else if (err.message) {
+        errorMsg += ": " + err.message;
+      }
+      setGuestError(errorMsg);
+    } finally {
+      setGuestLoading(false);
     }
   };
 
@@ -839,8 +870,30 @@ export default function Profile({
             </button>
           </div>
 
-          {/* Prominent logout action button at the bottom of profile view */}
-          <div className="pt-4 mt-2">
+          {/* Guest login and logout action buttons at the bottom of profile view */}
+          <div className="pt-4 mt-2 space-y-3">
+            {guestError && (
+              <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs rounded-2xl flex items-start gap-2 animate-fadeIn">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span className="font-semibold">{guestError}</span>
+              </div>
+            )}
+
+            <button
+              id="profile-guest-login-btn"
+              type="button"
+              onClick={handleGuestLogin}
+              disabled={guestLoading}
+              className={`w-full py-3.5 px-4 text-xs font-bold rounded-2xl flex items-center justify-center gap-2 border border-dashed transition active:scale-95 ${
+                darkMode 
+                  ? "border-purple-500/30 text-purple-300 hover:bg-purple-950/20 hover:border-purple-500/50" 
+                  : "border-purple-300 text-purple-700 hover:bg-purple-50 hover:border-purple-400"
+              }`}
+            >
+              <UserCheck className="w-4 h-4 text-purple-500" />
+              {guestLoading ? "Conectando como Convidado..." : "Entrar como Convidado (Firebase)"}
+            </button>
+
             <button
               id="profile-large-logout-btn"
               onClick={handleLogout}
@@ -1266,6 +1319,21 @@ export default function Profile({
             <p className={`text-[11px] leading-relaxed ${darkMode ? "text-zinc-500" : "text-gray-400"}`}>
               Desconectar-se com segurança do seu perfil atual e retornar à página de login.
             </p>
+            <button
+              id="account-guest-btn"
+              type="button"
+              onClick={handleGuestLogin}
+              disabled={guestLoading}
+              className={`w-full py-2.5 px-4 text-[10px] font-bold rounded-xl flex items-center justify-center gap-2 border border-dashed transition active:scale-95 mb-2 ${
+                darkMode 
+                  ? "border-purple-500/30 text-purple-300 hover:bg-purple-950/20" 
+                  : "border-purple-300 text-purple-700 hover:bg-purple-50"
+              }`}
+            >
+              <UserCheck className="w-3.5 h-3.5 text-purple-500" />
+              {guestLoading ? "Conectando como Convidado..." : "Entrar como Convidado (Firebase)"}
+            </button>
+
             <button
               id="account-logout-btn"
               onClick={handleLogout}

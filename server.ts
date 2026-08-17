@@ -660,6 +660,11 @@ function generateLocalFallbackCommandParse(text: string, referenceDate: string, 
   };
 }
 
+// 0. API: Health check for real internet and server connectivity
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok", timestamp: Date.now() });
+});
+
 // 1. API: Parse voice command or text command
 app.post("/api/parse-command", async (req, res) => {
   const { text, currentDate, transactionsSummary, currency } = req.body;
