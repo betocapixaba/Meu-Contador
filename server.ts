@@ -1915,7 +1915,10 @@ app.get("/api/crypto-chart", async (req, res) => {
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: { 
+        middlewareMode: true,
+        hmr: process.env.DISABLE_HMR === "true" ? false : undefined
+      },
       appType: "spa",
     });
     app.use(vite.middlewares);
