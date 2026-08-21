@@ -82,33 +82,68 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
   const itemsRef = useRef<CommodityItem[]>(items);
   itemsRef.current = items;
 
-  const COMMODITY_PAIRS: Record<string, string[]> = {
-    BTC: ["BTCUSDT", "BTCUSD"],
-    ETH: ["ETHUSDT", "ETHUSD"],
-    SOL: ["SOLUSDT", "SOLUSD"],
-    XRP: ["XRPUSDT", "XRPUSD"],
-    ADA: ["ADAUSDT", "ADAUSD"],
-    DOGE: ["DOGEUSDT", "DOGEUSD"],
-    SHIB: ["SHIBUSDT", "SHIBUSD"],
-    AVAX: ["AVAXUSDT", "AVAXUSD"],
-    LINK: ["LINKUSDT", "LINKUSD"],
-    DOT: ["DOTUSDT", "DOTUSD"],
-    LTC: ["LTCUSDT", "LTCUSD"],
-    BCH: ["BCHUSDT", "BCHUSD"],
-    XLM: ["XLMUSDT", "XLMUSD"],
-    HBAR: ["HBARUSDT", "HBARUSD"],
-    XTZ: ["XTZUSDT", "XTZUSD"],
-    APT: ["APTUSDT", "APTUSD"]
+  const COMMODITY_DEFS = [
+    { symbol: "BTC", name: "Bitcoin", category: "Reserva de Valor / Ouro Digital", pairs: ["BTCUSDT", "BTCUSD", "BTCBRL"] },
+    { symbol: "ETH", name: "Ethereum Ether", category: "Contratos Inteligentes", pairs: ["ETHUSDT", "ETHUSD", "ETHBRL"] },
+    { symbol: "SOL", name: "Solana", category: "High Performance L1", pairs: ["SOLUSDT", "SOLUSD", "SOLBRL"] },
+    { symbol: "XRP", name: "XRP", category: "Liquidez e Remessas", pairs: ["XRPUSDT", "XRPUSD", "XRPBRL"] },
+    { symbol: "ADA", name: "Cardano", category: "Proof of Stake L1", pairs: ["ADAUSDT", "ADAUSD", "ADABRL"] },
+    { symbol: "DOGE", name: "Dogecoin", category: "Ativo Memético / P2P", pairs: ["DOGEUSDT", "DOGEUSD", "DOGEBRL"] },
+    { symbol: "SHIB", name: "Shiba Inu", category: "Ecossistema Memético / L2", pairs: ["SHIBUSDT", "SHIBUSD", "SHIBBRL"] },
+    { symbol: "AVAX", name: "Avalanche", category: "Subredes & DeFi", pairs: ["AVAXUSDT", "AVAXUSD", "AVAXBRL"] },
+    { symbol: "LINK", name: "Chainlink", category: "Oráculos de Dados", pairs: ["LINKUSDT", "LINKUSD", "LINKBRL"] },
+    { symbol: "DOT", name: "Polkadot", category: "Interoperabilidade Multichain", pairs: ["DOTUSDT", "DOTUSD", "DOTBRL"] },
+    { symbol: "LTC", name: "Litecoin", category: "Pagamentos Rápidos / Prata Digital", pairs: ["LTCUSDT", "LTCUSD", "LTCBRL"] },
+    { symbol: "BCH", name: "Bitcoin Cash", category: "Dinheiro Eletrônico P2P", pairs: ["BCHUSDT", "BCHUSD", "BCHBRL"] },
+    { symbol: "XLM", name: "Stellar", category: "Rede de Pagamentos Globais", pairs: ["XLMUSDT", "XLMUSD", "XLMBRL"] },
+    { symbol: "HBAR", name: "Hedera", category: "Hashgraph Enterprise", pairs: ["HBARUSDT", "HBARUSD", "HBARBRL"] },
+    { symbol: "XTZ", name: "Tezos", category: "Self-Amending L1", pairs: ["XTZUSDT", "XTZUSD", "XTZBRL"] },
+    { symbol: "APT", name: "Aptos", category: "Move-Based L1", pairs: ["APTUSDT", "APTUSD", "APTBRL"] }
+  ];
+
+  const COMMODITY_PAIRS: Record<string, string[]> = COMMODITY_DEFS.reduce((acc, item) => {
+    acc[item.symbol] = item.pairs;
+    return acc;
+  }, {} as Record<string, string[]>);
+
+  // Helper to fetch live USD-BRL rate directly from public AwesomeAPI
+  const fetchLiveUsdBrl = async (): Promise<number> => {
+    try {
+      const res = await fetch(`https://economia.awesomeapi.com.br/json/last/USD-BRL?t=${Date.now()}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.USDBRL?.bid) {
+          const rate = parseFloat(data.USDBRL.bid);
+          if (!isNaN(rate) && rate > 0) return rate;
+        }
+      }
+    } catch {
+      // Ignore fallback
+    }
+    return 5.65;
   };
 
   const fetchCommoditiesData = async () => {
     setLoading(true);
-    const minDelay = new Promise(resolve => setTimeout(resolve, 500));
+    const minDelay = new Promise(resolve => setTimeout(resolve, 400));
 
+    // 1. Fetch live dollar exchange rate in parallel
+    let currentDollarRate = usdBrlRate;
     try {
-      // 1. Try backend server endpoint
+      const dollarRate = await fetchLiveUsdBrl();
+      if (dollarRate > 0) {
+        currentDollarRate = dollarRate;
+        setUsdBrlRate(dollarRate);
+      }
+    } catch {
+      // Continue with current rate
+    }
+
+    // 2. Attempt backend endpoint (works in fullstack mode)
+    try {
       const res = await fetch(`/api/crypto-rates?t=${Date.now()}`);
-      if (res.ok) {
+      const contentType = res.headers.get("content-type");
+      if (res.ok && contentType && contentType.includes("application/json")) {
         const data = await res.json();
         if (data && Array.isArray(data.items) && data.items.length > 0) {
           setItems(data.items);
@@ -116,7 +151,7 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
           const nowTime = data.timestamp || new Date().toLocaleTimeString("pt-BR");
           setLastUpdated(nowTime);
           if (!wsConnected) {
-            setSourceInfo(data.source || "Mercado Spot");
+            setSourceInfo(data.source || "Mercado Spot (API Integrada)");
           }
 
           setSelectedCoin(prev => {
@@ -138,44 +173,111 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
         }
       }
     } catch (err) {
-      console.warn("Backend crypto fetch error, attempting direct fallback:", err);
+      console.warn("Backend crypto fetch skipped/failed, proceeding to direct Binance REST fetch:", err);
     }
 
-    // Direct fallback if server fails
-    try {
-      const fallbackList = [
-        { symbol: "BTC", name: "Bitcoin", category: "Reserva de Valor / Ouro Digital", priceUsd: 63448.82, change24h: -0.79 },
-        { symbol: "ETH", name: "Ethereum Ether", category: "Contratos Inteligentes", priceUsd: 1899.74, change24h: -0.24 },
-        { symbol: "SOL", name: "Solana", category: "High Performance L1", priceUsd: 75.52, change24h: -0.91 },
-        { symbol: "XRP", name: "XRP", category: "Liquidez e Remessas", priceUsd: 1.0029, change24h: -1.05 },
-        { symbol: "ADA", name: "Cardano", category: "Proof of Stake L1", priceUsd: 0.1773, change24h: -1.70 },
-        { symbol: "DOGE", name: "Dogecoin", category: "Ativo Memético / P2P", priceUsd: 0.0702, change24h: -0.11 },
-        { symbol: "SHIB", name: "Shiba Inu", category: "Ecossistema Memético / L2", priceUsd: 0.00000444, change24h: 2.68 },
-        { symbol: "AVAX", name: "Avalanche", category: "Subredes & DeFi", priceUsd: 6.379, change24h: 0.57 },
-        { symbol: "LINK", name: "Chainlink", category: "Oráculos de Dados", priceUsd: 9.438, change24h: 3.12 },
-        { symbol: "DOT", name: "Polkadot", category: "Interoperabilidade Multichain", priceUsd: 0.766, change24h: -0.39 },
-        { symbol: "LTC", name: "Litecoin", category: "Pagamentos Rápidos / Prata Digital", priceUsd: 44.25, change24h: -2.39 },
-        { symbol: "BCH", name: "Bitcoin Cash", category: "Dinheiro Eletrônico P2P", priceUsd: 204.60, change24h: -0.48 },
-        { symbol: "XLM", name: "Stellar", category: "Rede de Pagamentos Globais", priceUsd: 0.1585, change24h: -0.93 },
-        { symbol: "HBAR", name: "Hedera", category: "Hashgraph Enterprise", priceUsd: 0.0650, change24h: 0.72 },
-        { symbol: "XTZ", name: "Tezos", category: "Self-Amending L1", priceUsd: 0.2015, change24h: 0.00 },
-        { symbol: "APT", name: "Aptos", category: "Move-Based L1", priceUsd: 0.525, change24h: -0.91 }
-      ].map(c => ({
-        ...c,
-        priceBrl: c.priceUsd * 5.65,
-        high24hUsd: c.priceUsd * 1.02,
-        low24hUsd: c.priceUsd * 0.98,
-        volume24hUsd: c.priceUsd * 200000
-      }));
+    // 3. Direct Public REST fallback (Works 100% on Vercel, static preview, and edge)
+    const directRestUrls = [
+      "https://api.binance.com/api/v3/ticker/24hr",
+      "https://data-api.binance.vision/api/v3/ticker/24hr",
+      "https://api1.binance.com/api/v3/ticker/24hr",
+      "https://api2.binance.com/api/v3/ticker/24hr",
+      "https://api3.binance.com/api/v3/ticker/24hr"
+    ];
 
+    for (const url of directRestUrls) {
+      try {
+        const res = await fetch(url);
+        if (res.ok) {
+          const rawTickers = await res.json();
+          if (Array.isArray(rawTickers) && rawTickers.length > 0) {
+            const mappedItems: CommodityItem[] = COMMODITY_DEFS.map(def => {
+              const ticker = rawTickers.find((t: any) => def.pairs.includes(t.symbol));
+              const existing = itemsRef.current.find(i => i.symbol === def.symbol);
+
+              if (ticker) {
+                const priceUsd = parseFloat(ticker.lastPrice) || existing?.priceUsd || 0;
+                const change24h = parseFloat(ticker.priceChangePercent) || existing?.change24h || 0;
+                const high24hUsd = parseFloat(ticker.highPrice) || (priceUsd * 1.02);
+                const low24hUsd = parseFloat(ticker.lowPrice) || (priceUsd * 0.98);
+                const volume24hUsd = parseFloat(ticker.quoteVolume) || (priceUsd * 150000);
+
+                return {
+                  symbol: def.symbol,
+                  name: def.name,
+                  category: def.category,
+                  priceUsd,
+                  priceBrl: priceUsd * currentDollarRate,
+                  change24h,
+                  high24hUsd,
+                  low24hUsd,
+                  volume24hUsd
+                };
+              }
+
+              if (existing) return existing;
+
+              return {
+                symbol: def.symbol,
+                name: def.name,
+                category: def.category,
+                priceUsd: 100,
+                priceBrl: 100 * currentDollarRate,
+                change24h: 0,
+                high24hUsd: 102,
+                low24hUsd: 98,
+                volume24hUsd: 100000
+              };
+            });
+
+            setItems(mappedItems);
+            setLastUpdated(new Date().toLocaleTimeString("pt-BR"));
+            if (!wsConnected) {
+              setSourceInfo("Binance Spot REST (Direto)");
+            }
+
+            setSelectedCoin(prev => {
+              if (!prev) return null;
+              const match = mappedItems.find(i => i.symbol === prev.symbol);
+              return match || prev;
+            });
+
+            setCompareCoin(prev => {
+              if (!prev) return null;
+              const match = mappedItems.find(i => i.symbol === prev.symbol);
+              return match || prev;
+            });
+
+            setShowRefreshFeedback(true);
+            setTimeout(() => setShowRefreshFeedback(false), 2000);
+            await minDelay;
+            return;
+          }
+        }
+      } catch {
+        // Try next public mirror
+      }
+    }
+
+    // 4. If everything fails and items is currently empty, initialize with best effort
+    if (itemsRef.current.length === 0) {
+      const fallbackList: CommodityItem[] = COMMODITY_DEFS.map(c => ({
+        symbol: c.symbol,
+        name: c.name,
+        category: c.category,
+        priceUsd: 100,
+        priceBrl: 100 * currentDollarRate,
+        change24h: 0,
+        high24hUsd: 102,
+        low24hUsd: 98,
+        volume24hUsd: 100000
+      }));
       setItems(fallbackList);
       setLastUpdated(new Date().toLocaleTimeString("pt-BR"));
-      setShowRefreshFeedback(true);
-      setTimeout(() => setShowRefreshFeedback(false), 2000);
-      await minDelay;
-    } finally {
-      setLoading(false);
     }
+
+    await minDelay;
+    setLoading(false);
   };
 
   // Real-Time WebSocket Connection with robust fallback
@@ -367,7 +469,8 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
 
     try {
       const res = await fetch(`/api/crypto-chart?symbol=${encodeURIComponent(coin.symbol)}&period=${period}&currentPriceUsd=${targetUsd}&change24h=${coin.change24h}&t=${Date.now()}`);
-      if (res.ok) {
+      const contentType = res.headers.get("content-type");
+      if (res.ok && contentType && contentType.includes("application/json")) {
         const data = await res.json();
         if (data && Array.isArray(data.data) && data.data.length > 0) {
           const rawPts: ChartPoint[] = data.data.map((p: ChartPoint) => ({
@@ -387,7 +490,69 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
         }
       }
     } catch (e) {
-      console.warn("Error fetching crypto chart:", e);
+      console.warn("Backend crypto chart fetch skipped, attempting direct Binance Kline fetch:", e);
+    }
+
+    // Direct Binance Public Kline fetch for Vercel static deployment
+    try {
+      const intervalMap: Record<PeriodType, { interval: string; limit: number }> = {
+        "15m": { interval: "1m", limit: 15 },
+        "30m": { interval: "1m", limit: 30 },
+        "1h": { interval: "1m", limit: 60 },
+        "1w": { interval: "4h", limit: 42 },
+        "1M": { interval: "1d", limit: 30 },
+        "1y": { interval: "1w", limit: 52 }
+      };
+      const cfg = intervalMap[period] || { interval: "1h", limit: 24 };
+      const symbolPair = `${coin.symbol}USDT`;
+      const binanceUrls = [
+        `https://api.binance.com/api/v3/klines?symbol=${symbolPair}&interval=${cfg.interval}&limit=${cfg.limit}`,
+        `https://data-api.binance.vision/api/v3/klines?symbol=${symbolPair}&interval=${cfg.interval}&limit=${cfg.limit}`,
+        `https://api1.binance.com/api/v3/klines?symbol=${symbolPair}&interval=${cfg.interval}&limit=${cfg.limit}`
+      ];
+
+      for (const bUrl of binanceUrls) {
+        try {
+          const kRes = await fetch(bUrl);
+          if (kRes.ok) {
+            const klines = await kRes.json();
+            if (Array.isArray(klines) && klines.length > 0) {
+              const klinePts: ChartPoint[] = klines.map((k: any) => {
+                const openTime = Number(k[0]);
+                const closePrice = parseFloat(k[4]) || targetUsd;
+                const highPrice = parseFloat(k[2]) || closePrice;
+                const lowPrice = parseFloat(k[3]) || closePrice;
+                const volume = parseFloat(k[7]) || 0;
+                const dObj = new Date(openTime);
+                const isTimeOnly = period === "15m" || period === "30m" || period === "1h";
+
+                return {
+                  timestamp: openTime,
+                  timeLabel: isTimeOnly
+                    ? dObj.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+                    : (period === "1y"
+                        ? dObj.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" })
+                        : dObj.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })),
+                  priceUsd: closePrice,
+                  priceBrl: closePrice * conversionRatio,
+                  highUsd: highPrice,
+                  lowUsd: lowPrice,
+                  volumeUsd: volume
+                };
+              });
+
+              if (klinePts.length > 0 && targetUsd > 0) {
+                const last = klinePts[klinePts.length - 1];
+                last.priceUsd = targetUsd;
+                last.priceBrl = targetBrl > 0 ? targetBrl : targetUsd * conversionRatio;
+              }
+              return klinePts;
+            }
+          }
+        } catch {}
+      }
+    } catch (e) {
+      console.warn("Direct Binance kline fetch error:", e);
     }
 
     // Fallback chart points generator ending exactly at targetUsd / targetBrl

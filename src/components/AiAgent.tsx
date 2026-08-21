@@ -283,7 +283,8 @@ export default function AiAgent({ darkMode, onTransactionAdded, currency, transa
           })
         });
 
-        if (response.ok) {
+        const contentType = response.headers.get("content-type");
+        if (response.ok && contentType && contentType.includes("application/json")) {
           const parsed = await response.json();
           if (parsed.transcript) {
             setTranscript(parsed.transcript);
@@ -427,7 +428,8 @@ export default function AiAgent({ darkMode, onTransactionAdded, currency, transa
         })
       });
 
-      if (res.ok) {
+      const contentType = res.headers.get("content-type");
+      if (res.ok && contentType && contentType.includes("application/json")) {
         parsedResult = await res.json();
       } else {
         parsedResult = localFallbackParse(textToProcess);

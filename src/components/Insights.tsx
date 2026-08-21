@@ -116,7 +116,8 @@ export default function Insights({ darkMode, balance, totalIncome, totalExpense,
         })
       });
 
-      if (!response.ok) {
+      const contentType = response.headers.get("content-type");
+      if (!response.ok || !contentType || !contentType.includes("application/json")) {
         throw new Error("Servidor indisponível");
       }
 

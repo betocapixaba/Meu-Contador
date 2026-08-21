@@ -61,7 +61,8 @@ export default function ReceiptScanner({ darkMode, onTransactionAdded, onClose, 
           })
         });
 
-        if (response.ok) {
+        const contentType = response.headers.get("content-type");
+        if (response.ok && contentType && contentType.includes("application/json")) {
           parsedData = await response.json();
         } else {
           parsedData = {

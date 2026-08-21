@@ -74,7 +74,8 @@ export default function Dashboard({
     try {
       // 1. Primary: Try backend real-time route with cache-busting
       const res = await fetch(`/api/usd-rate?t=${Date.now()}`);
-      if (res.ok) {
+      const contentType = res.headers.get("content-type");
+      if (res.ok && contentType && contentType.includes("application/json")) {
         const data = await res.json();
         if (data && typeof data.bid === "number" && !isNaN(data.bid)) {
           setUsdRate({

@@ -241,15 +241,18 @@ export default function VoiceAssistant({ darkMode, onTransactionAdded, onClose, 
         });
 
         if (response.ok) {
-          const parsed = await response.json();
-          if (parsed.transcript) {
-            setTranscript(parsed.transcript);
-            setManualInput(parsed.transcript);
+          const contentType = response.headers.get("content-type");
+          if (contentType && contentType.includes("application/json")) {
+            const parsed = await response.json();
+            if (parsed.transcript) {
+              setTranscript(parsed.transcript);
+              setManualInput(parsed.transcript);
+            }
+            await saveTransactionResult(parsed);
+            return;
           }
-          await saveTransactionResult(parsed);
-        } else {
-          throw new Error("Erro ao processar áudio pela IA.");
         }
+        throw new Error("Erro ao processar áudio pela IA.");
       };
     } catch (err: any) {
       console.error("Audio parse error:", err);
@@ -319,7 +322,8 @@ export default function VoiceAssistant({ darkMode, onTransactionAdded, onClose, 
         })
       });
 
-      if (response.ok) {
+      const contentType = response.headers.get("content-type");
+      if (response.ok && contentType && contentType.includes("application/json")) {
         parsedData = await response.json();
       } else {
         parsedData = localParseCommand(commandText);
