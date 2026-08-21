@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { 
   Coins, 
   RefreshCcw, 
@@ -6,18 +6,14 @@ import {
   TrendingUp, 
   TrendingDown, 
   Globe, 
-  ShieldCheck, 
   Sparkles, 
-  ArrowUpRight, 
-  ArrowDownLeft, 
-  Info, 
-  Clock,
-  DollarSign,
-  X,
-  LineChart as LineChartIcon,
-  Maximize2,
-  Calendar,
-  GitCompare,
+  Maximize2, 
+  DollarSign, 
+  X, 
+  LineChart as LineChartIcon, 
+  Clock, 
+  GitCompare, 
+  Info,
   Layers,
   Percent
 } from "lucide-react";
@@ -37,7 +33,7 @@ interface DigitalCommoditiesProps {
   darkMode: boolean;
 }
 
-interface CommodityItem {
+export interface CommodityItem {
   symbol: string;
   name: string;
   category: string;
@@ -49,7 +45,7 @@ interface CommodityItem {
   volume24hUsd: number;
 }
 
-interface ChartPoint {
+export interface ChartPoint {
   timestamp: number;
   timeLabel: string;
   priceUsd: number;
@@ -59,12 +55,11 @@ interface ChartPoint {
   volumeUsd: number;
 }
 
-type PeriodType = "15m" | "30m" | "1h" | "1w" | "1M" | "1y";
+export type PeriodType = "15m" | "30m" | "1h" | "1w" | "1M" | "1y";
 
 export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
   const [items, setItems] = useState<CommodityItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [displayCurrency, setDisplayCurrency] = useState<"BRL" | "USD">("BRL");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("Todas");
   const [usdBrlRate, setUsdBrlRate] = useState<number>(5.65);
@@ -84,28 +79,31 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
   const [loadingChart, setLoadingChart] = useState(false);
   const [comparisonMode, setComparisonMode] = useState<"percentage" | "absolute">("percentage");
 
-  const COMMODITY_PAIRS: Record<string, string> = {
-    BTC: "BTCUSDT",
-    ETH: "ETHUSDT",
-    SOL: "SOLUSDT",
-    XRP: "XRPUSDT",
-    ADA: "ADAUSDT",
-    DOGE: "DOGEUSDT",
-    SHIB: "SHIBUSDT",
-    AVAX: "AVAXUSDT",
-    LINK: "LINKUSDT",
-    DOT: "DOTUSDT",
-    LTC: "LTCUSDT",
-    BCH: "BCHUSDT",
-    XLM: "XLMUSDT",
-    HBAR: "HBARUSDT",
-    XTZ: "XTZUSDT",
-    APT: "APTUSDT"
+  const itemsRef = useRef<CommodityItem[]>(items);
+  itemsRef.current = items;
+
+  const COMMODITY_PAIRS: Record<string, string[]> = {
+    BTC: ["BTCUSDT", "BTCUSD"],
+    ETH: ["ETHUSDT", "ETHUSD"],
+    SOL: ["SOLUSDT", "SOLUSD"],
+    XRP: ["XRPUSDT", "XRPUSD"],
+    ADA: ["ADAUSDT", "ADAUSD"],
+    DOGE: ["DOGEUSDT", "DOGEUSD"],
+    SHIB: ["SHIBUSDT", "SHIBUSD"],
+    AVAX: ["AVAXUSDT", "AVAXUSD"],
+    LINK: ["LINKUSDT", "LINKUSD"],
+    DOT: ["DOTUSDT", "DOTUSD"],
+    LTC: ["LTCUSDT", "LTCUSD"],
+    BCH: ["BCHUSDT", "BCHUSD"],
+    XLM: ["XLMUSDT", "XLMUSD"],
+    HBAR: ["HBARUSDT", "HBARUSD"],
+    XTZ: ["XTZUSDT", "XTZUSD"],
+    APT: ["APTUSDT", "APTUSD"]
   };
 
   const fetchCommoditiesData = async () => {
     setLoading(true);
-    const minDelay = new Promise(resolve => setTimeout(resolve, 600));
+    const minDelay = new Promise(resolve => setTimeout(resolve, 500));
 
     try {
       // 1. Try backend server endpoint
@@ -146,22 +144,22 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
     // Direct fallback if server fails
     try {
       const fallbackList = [
-        { symbol: "BTC", name: "Bitcoin", category: "Reserva de Valor / Ouro Digital", priceUsd: 63000, change24h: -0.79 },
-        { symbol: "ETH", name: "Ethereum Ether", category: "Contratos Inteligentes", priceUsd: 1882, change24h: -0.24 },
-        { symbol: "SOL", name: "Solana", category: "High Performance L1", priceUsd: 75.35, change24h: -0.91 },
-        { symbol: "XRP", name: "XRP", category: "Liquidez e Remessas", priceUsd: 1.00, change24h: -1.05 },
-        { symbol: "ADA", name: "Cardano", category: "Proof of Stake L1", priceUsd: 0.18, change24h: -1.70 },
-        { symbol: "DOGE", name: "Dogecoin", category: "Ativo Memético / P2P", priceUsd: 0.070, change24h: -0.11 },
-        { symbol: "SHIB", name: "Shiba Inu", category: "Ecossistema Memético / L2", priceUsd: 0.0000046, change24h: 2.68 },
-        { symbol: "AVAX", name: "Avalanche", category: "Subredes & DeFi", priceUsd: 6.49, change24h: 0.57 },
-        { symbol: "LINK", name: "Chainlink", category: "Oráculos de Dados", priceUsd: 9.15, change24h: 3.12 },
+        { symbol: "BTC", name: "Bitcoin", category: "Reserva de Valor / Ouro Digital", priceUsd: 63448.82, change24h: -0.79 },
+        { symbol: "ETH", name: "Ethereum Ether", category: "Contratos Inteligentes", priceUsd: 1899.74, change24h: -0.24 },
+        { symbol: "SOL", name: "Solana", category: "High Performance L1", priceUsd: 75.52, change24h: -0.91 },
+        { symbol: "XRP", name: "XRP", category: "Liquidez e Remessas", priceUsd: 1.0029, change24h: -1.05 },
+        { symbol: "ADA", name: "Cardano", category: "Proof of Stake L1", priceUsd: 0.1773, change24h: -1.70 },
+        { symbol: "DOGE", name: "Dogecoin", category: "Ativo Memético / P2P", priceUsd: 0.0702, change24h: -0.11 },
+        { symbol: "SHIB", name: "Shiba Inu", category: "Ecossistema Memético / L2", priceUsd: 0.00000444, change24h: 2.68 },
+        { symbol: "AVAX", name: "Avalanche", category: "Subredes & DeFi", priceUsd: 6.379, change24h: 0.57 },
+        { symbol: "LINK", name: "Chainlink", category: "Oráculos de Dados", priceUsd: 9.438, change24h: 3.12 },
         { symbol: "DOT", name: "Polkadot", category: "Interoperabilidade Multichain", priceUsd: 0.766, change24h: -0.39 },
-        { symbol: "LTC", name: "Litecoin", category: "Pagamentos Rápidos / Prata Digital", priceUsd: 43.65, change24h: -2.39 },
-        { symbol: "BCH", name: "Bitcoin Cash", category: "Dinheiro Eletrônico P2P", priceUsd: 205.50, change24h: -0.48 },
-        { symbol: "XLM", name: "Stellar", category: "Rede de Pagamentos Globais", priceUsd: 0.158, change24h: -0.93 },
-        { symbol: "HBAR", name: "Hedera", category: "Hashgraph Enterprise", priceUsd: 0.066, change24h: 0.72 },
-        { symbol: "XTZ", name: "Tezos", category: "Self-Amending L1", priceUsd: 0.196, change24h: 0.00 },
-        { symbol: "APT", name: "Aptos", category: "Move-Based L1", priceUsd: 0.546, change24h: -0.91 }
+        { symbol: "LTC", name: "Litecoin", category: "Pagamentos Rápidos / Prata Digital", priceUsd: 44.25, change24h: -2.39 },
+        { symbol: "BCH", name: "Bitcoin Cash", category: "Dinheiro Eletrônico P2P", priceUsd: 204.60, change24h: -0.48 },
+        { symbol: "XLM", name: "Stellar", category: "Rede de Pagamentos Globais", priceUsd: 0.1585, change24h: -0.93 },
+        { symbol: "HBAR", name: "Hedera", category: "Hashgraph Enterprise", priceUsd: 0.0650, change24h: 0.72 },
+        { symbol: "XTZ", name: "Tezos", category: "Self-Amending L1", priceUsd: 0.2015, change24h: 0.00 },
+        { symbol: "APT", name: "Aptos", category: "Move-Based L1", priceUsd: 0.525, change24h: -0.91 }
       ].map(c => ({
         ...c,
         priceBrl: c.priceUsd * 5.65,
@@ -180,20 +178,35 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
     }
   };
 
-  // Real-Time WebSocket Connection to Binance MiniTicker Stream
+  // Real-Time WebSocket Connection with robust fallback
   useEffect(() => {
     let ws: WebSocket | null = null;
     let reconnectTimeout: any = null;
     let isDestroyed = false;
+    let failCount = 0;
+    const wsEndpoints = [
+      "wss://stream.binance.com/ws/!miniTicker@arr",
+      "wss://stream.binance.com:9443/ws/!miniTicker@arr",
+      "wss://stream.binance.us/ws/!miniTicker@arr"
+    ];
+    let endpointIndex = 0;
 
     const connectWebSocket = () => {
+      if (isDestroyed) return;
+      if (failCount > 6) {
+        // If WebSocket is blocked by network or sandbox, smoothly use background REST sync
+        setWsConnected(false);
+        setSourceInfo("Mercado Spot (API Integrada)");
+        return;
+      }
+
       try {
-        // Binance public ticker array stream
-        const wsUrl = "wss://stream.binance.com:9443/ws/!miniTicker@arr";
+        const wsUrl = wsEndpoints[endpointIndex % wsEndpoints.length];
         ws = new WebSocket(wsUrl);
 
         ws.onopen = () => {
           if (!isDestroyed) {
+            failCount = 0;
             setWsConnected(true);
             setSourceInfo("Binance WebSocket (Ao Vivo)");
           }
@@ -214,10 +227,9 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
                 const newDirections: Record<string, "up" | "down"> = {};
 
                 const updated = prevItems.map(item => {
-                  const pair = COMMODITY_PAIRS[item.symbol];
-                  if (!pair) return item;
+                  const pairs = COMMODITY_PAIRS[item.symbol] || [`${item.symbol}USDT`];
+                  const ticker = rawData.find((t: any) => pairs.includes(t.s));
 
-                  const ticker = rawData.find((t: any) => t.s === pair);
                   if (ticker && ticker.c) {
                     const newPriceUsd = parseFloat(ticker.c);
                     const openPrice = parseFloat(ticker.o);
@@ -274,26 +286,27 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
                 return changed ? updated : prevItems;
               });
             }
-          } catch (e) {
-            console.warn("WebSocket parse error:", e);
+          } catch {
+            // Silently ignore parse errors
           }
         };
 
-        ws.onerror = (err) => {
-          console.warn("WebSocket error, fallback to fast poll:", err);
+        ws.onerror = () => {
           setWsConnected(false);
         };
 
         ws.onclose = () => {
           if (!isDestroyed) {
             setWsConnected(false);
-            // Reconnect after 3 seconds
-            reconnectTimeout = setTimeout(connectWebSocket, 3000);
+            failCount++;
+            endpointIndex++;
+            const backoff = Math.min(10000, 3000 * Math.pow(1.3, failCount));
+            reconnectTimeout = setTimeout(connectWebSocket, backoff);
           }
         };
-      } catch (err) {
-        console.warn("Could not initiate WebSocket:", err);
+      } catch {
         setWsConnected(false);
+        failCount++;
       }
     };
 
@@ -305,10 +318,47 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
       if (ws) {
         try {
           ws.close();
-        } catch (e) {}
+        } catch {}
       }
     };
   }, [usdBrlRate]);
+
+  // Smoothly update the last chart data point when selectedCoin or compareCoin live price updates without reloading the entire chart
+  useEffect(() => {
+    if (!selectedCoin) return;
+    setChartData(prev => {
+      if (!prev || prev.length === 0) return prev;
+      const updated = [...prev];
+      const lastIdx = updated.length - 1;
+      if (selectedCoin.priceUsd > 0 && Math.abs(updated[lastIdx].priceUsd - selectedCoin.priceUsd) > 0.00000001) {
+        updated[lastIdx] = {
+          ...updated[lastIdx],
+          priceUsd: selectedCoin.priceUsd,
+          priceBrl: selectedCoin.priceBrl
+        };
+        return updated;
+      }
+      return prev;
+    });
+  }, [selectedCoin?.priceUsd]);
+
+  useEffect(() => {
+    if (!compareCoin) return;
+    setCompareChartData(prev => {
+      if (!prev || prev.length === 0) return prev;
+      const updated = [...prev];
+      const lastIdx = updated.length - 1;
+      if (compareCoin.priceUsd > 0 && Math.abs(updated[lastIdx].priceUsd - compareCoin.priceUsd) > 0.00000001) {
+        updated[lastIdx] = {
+          ...updated[lastIdx],
+          priceUsd: compareCoin.priceUsd,
+          priceBrl: compareCoin.priceBrl
+        };
+        return updated;
+      }
+      return prev;
+    });
+  }, [compareCoin?.priceUsd]);
 
   const getChartPointsForCoin = async (coin: CommodityItem, period: PeriodType): Promise<ChartPoint[]> => {
     const targetUsd = coin.priceUsd;
@@ -401,7 +451,7 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
 
   useEffect(() => {
     fetchCommoditiesData();
-    const interval = setInterval(fetchCommoditiesData, 8000); // 8s fast real-time poll fallback
+    const interval = setInterval(fetchCommoditiesData, 8000); // 8s fast polling fallback
 
     const handleAppRefresh = () => {
       fetchCommoditiesData();
@@ -414,24 +464,62 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
     };
   }, []);
 
+  // Fetch chart only when coin symbol or period changes (not on every live tick)
   useEffect(() => {
     if (selectedCoin) {
       fetchAllChartData(selectedCoin, compareCoin, selectedPeriod);
     }
-  }, [selectedCoin?.symbol, selectedCoin?.priceUsd, compareCoin?.symbol, compareCoin?.priceUsd, selectedPeriod]);
+  }, [selectedCoin?.symbol, compareCoin?.symbol, selectedPeriod]);
 
-  // Format currency helper with 4 decimal places after the comma (crypto trading platform standard)
-  const formatPrice = (value: number, currency: "BRL" | "USD") => {
-    const symbol = currency === "BRL" ? "R$" : "$";
+  // Modal ESC key listener and scroll lock
+  useEffect(() => {
+    if (selectedCoin) {
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === "Escape") {
+          setSelectedCoin(null);
+          setCompareCoin(null);
+        }
+      };
+      window.addEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = "hidden";
+      return () => {
+        window.removeEventListener("keydown", handleKeyDown);
+        document.body.style.overflow = "unset";
+      };
+    } else {
+      document.body.style.overflow = "unset";
+    }
+  }, [selectedCoin]);
+
+  // Format currency helper in USD ($)
+  const formatPrice = (value: number) => {
     if (value === undefined || value === null || isNaN(value)) {
-      return `${symbol} 0,0000`;
+      return "$ 0,0000";
     }
-    // For micro-value tokens (like SHIB) where 4 decimals would round to zero, preserve detailed decimals
     if (value > 0 && value < 0.0001) {
-      return `${symbol} ${value.toLocaleString("pt-BR", { minimumFractionDigits: 6, maximumFractionDigits: 8 })}`;
+      return `$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 6, maximumFractionDigits: 8 })}`;
     }
-    // Standard crypto trade standard: 4 decimal places after the comma
-    return `${symbol} ${value.toLocaleString("pt-BR", { minimumFractionDigits: 4, maximumFractionDigits: 4 })}`;
+    if (value > 0 && value < 0.01) {
+      return `$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 4, maximumFractionDigits: 6 })}`;
+    }
+    return `$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 4, maximumFractionDigits: 4 })}`;
+  };
+
+  // Concise Axis tick formatter for the chart
+  const formatAxisPrice = (val: number) => {
+    if (val >= 10000) {
+      return `$ ${(val / 1000).toFixed(1)}k`;
+    }
+    if (val >= 1000) {
+      return `$ ${val.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`;
+    }
+    if (val >= 1) {
+      return `$ ${val.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+    if (val >= 0.0001) {
+      return `$ ${val.toLocaleString("pt-BR", { minimumFractionDigits: 4, maximumFractionDigits: 4 })}`;
+    }
+    return `$ ${val.toLocaleString("pt-BR", { minimumFractionDigits: 6, maximumFractionDigits: 8 })}`;
   };
 
   // Color map for coin symbols
@@ -469,9 +557,11 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
 
   // Filtered items
   const filteredItems = items.filter(item => {
-    const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          item.symbol.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          item.category.toLowerCase().includes(searchTerm.toLowerCase());
+    const term = searchTerm.trim().toLowerCase();
+    const matchesSearch = !term ||
+                          item.name.toLowerCase().includes(term) ||
+                          item.symbol.toLowerCase().includes(term) ||
+                          item.category.toLowerCase().includes(term);
     
     if (selectedCategory === "Todas") return matchesSearch;
     if (selectedCategory === "Reserva / L1") {
@@ -492,44 +582,45 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
   // Top gainers/losers
   const topGainer = items.length > 0 ? [...items].sort((a, b) => b.change24h - a.change24h)[0] : null;
 
-  // Calculate stats for current primary chart & secondary compare chart
+  // Calculate stats for current primary chart & secondary compare chart in USD
   const firstPoint1 = chartData.length > 0 ? chartData[0] : null;
   const lastPoint1 = chartData.length > 0 ? chartData[chartData.length - 1] : null;
-  const periodValFirst1 = firstPoint1 ? (displayCurrency === "BRL" ? firstPoint1.priceBrl : firstPoint1.priceUsd) : 0;
-  const periodValLast1 = lastPoint1 ? (displayCurrency === "BRL" ? lastPoint1.priceBrl : lastPoint1.priceUsd) : 0;
-  const periodChangePct1 = periodValFirst1 > 0 ? ((periodValLast1 - periodValFirst1) / periodValFirst1) * 100 : 0;
+  const periodValFirst1 = firstPoint1 ? firstPoint1.priceUsd : 0;
+  const periodValLast1 = lastPoint1 ? lastPoint1.priceUsd : 0;
+  const periodChangePct1 = periodValFirst1 > 0 ? ((periodValLast1 - periodValFirst1) / periodValFirst1) * 100 : (selectedCoin?.change24h || 0);
   const isPeriodPositive = periodChangePct1 >= 0;
 
   let periodChangePct2 = 0;
   if (compareChartData.length > 0) {
     const firstPoint2 = compareChartData[0];
     const lastPoint2 = compareChartData[compareChartData.length - 1];
-    const periodValFirst2 = firstPoint2 ? (displayCurrency === "BRL" ? firstPoint2.priceBrl : firstPoint2.priceUsd) : 0;
-    const periodValLast2 = lastPoint2 ? (displayCurrency === "BRL" ? lastPoint2.priceBrl : lastPoint2.priceUsd) : 0;
-    periodChangePct2 = periodValFirst2 > 0 ? ((periodValLast2 - periodValFirst2) / periodValFirst2) * 100 : 0;
+    const periodValFirst2 = firstPoint2 ? firstPoint2.priceUsd : 0;
+    const periodValLast2 = lastPoint2 ? lastPoint2.priceUsd : 0;
+    periodChangePct2 = periodValFirst2 > 0 ? ((periodValLast2 - periodValFirst2) / periodValFirst2) * 100 : (compareCoin?.change24h || 0);
   }
   const spreadPct = periodChangePct1 - periodChangePct2;
 
-  const minChartVal = chartData.length > 0 
-    ? Math.min(...chartData.map(d => displayCurrency === "BRL" ? d.priceBrl : d.priceUsd))
-    : 0;
-  const maxChartVal = chartData.length > 0 
-    ? Math.max(...chartData.map(d => displayCurrency === "BRL" ? d.priceBrl : d.priceUsd))
-    : 0;
+  const validChartPrices = chartData.map(d => d.priceUsd).filter(v => v > 0);
+  const minChartVal = validChartPrices.length > 0 
+    ? Math.min(...validChartPrices)
+    : (selectedCoin?.low24hUsd || selectedCoin?.priceUsd || 0);
+  const maxChartVal = validChartPrices.length > 0 
+    ? Math.max(...validChartPrices)
+    : (selectedCoin?.high24hUsd || selectedCoin?.priceUsd || 0);
 
-  // Combined data structure for overlay chart rendering
+  // Combined data structure for overlay chart rendering in USD
   const startVal1 = periodValFirst1;
-  const startVal2 = compareChartData.length > 0 ? (displayCurrency === "BRL" ? compareChartData[0].priceBrl : compareChartData[0].priceUsd) : 0;
+  const startVal2 = compareChartData.length > 0 ? compareChartData[0].priceUsd : 0;
 
   const combinedChartData = chartData.map((p1, idx) => {
-    const p2 = compareChartData[idx];
-    const val1 = displayCurrency === "BRL" ? p1.priceBrl : p1.priceUsd;
+    const p2 = compareChartData.length > idx ? compareChartData[idx] : compareChartData[compareChartData.length - 1];
+    const val1 = p1.priceUsd;
     const pct1 = startVal1 > 0 ? ((val1 - startVal1) / startVal1) * 100 : 0;
 
     let val2 = 0;
     let pct2 = 0;
     if (p2 && compareChartData.length > 0) {
-      val2 = displayCurrency === "BRL" ? p2.priceBrl : p2.priceUsd;
+      val2 = p2.priceUsd;
       pct2 = startVal2 > 0 ? ((val2 - startVal2) / startVal2) * 100 : 0;
     }
 
@@ -540,7 +631,7 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
       priceBrl1: p1.priceBrl,
       val1,
       pct1,
-      priceUsd2: p2 ? p2.priceUsd : 0,
+      priceUsd2: val2,
       priceBrl2: p2 ? p2.priceBrl : 0,
       val2,
       pct2
@@ -574,38 +665,18 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
                 </span>
               </div>
               <p className={`text-xs mt-0.5 ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
-                Clique em qualquer moeda para visualizar o gráfico completo de 15 minutos a 1 ano.
+                Cotações e gráficos em Dólar Americano ($ USD) com histórico de 15 minutos a 1 ano.
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2.5 flex-wrap">
-            {/* Currency switcher BRL / USD */}
-            <div className={`p-1 rounded-xl border flex items-center gap-1 ${
-              darkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200 shadow-xs"
+            {/* Dollar Badge Indicator */}
+            <div className={`px-3 py-1.5 rounded-xl border flex items-center gap-1.5 text-xs font-bold font-mono ${
+              darkMode ? "bg-slate-800 border-slate-700 text-emerald-400" : "bg-white border-purple-200 text-purple-700 shadow-2xs"
             }`}>
-              <button
-                id="commodity-currency-brl-btn"
-                onClick={() => setDisplayCurrency("BRL")}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
-                  displayCurrency === "BRL" 
-                    ? "bg-purple-600 text-white shadow-xs" 
-                    : darkMode ? "text-slate-400 hover:text-white" : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                R$ (BRL)
-              </button>
-              <button
-                id="commodity-currency-usd-btn"
-                onClick={() => setDisplayCurrency("USD")}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
-                  displayCurrency === "USD" 
-                    ? "bg-purple-600 text-white shadow-xs" 
-                    : darkMode ? "text-slate-400 hover:text-white" : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                $ (USD)
-              </button>
+              <DollarSign className="w-3.5 h-3.5 text-emerald-500" />
+              <span>Valores em Dólar ($ USD)</span>
             </div>
 
             {/* Refresh Button */}
@@ -671,7 +742,7 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
           {topGainer && (
             <div className="text-[11px] font-bold flex items-center gap-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2.5 py-1 rounded-lg border border-emerald-500/20">
               <TrendingUp className="w-3.5 h-3.5" />
-              <span>Destaque 24h: <strong>{topGainer.symbol} ({topGainer.change24h > 0 ? `+${topGainer.change24h.toFixed(2)}%` : `${topGainer.change24h.toFixed(2)}%`})</strong></span>
+              <span>Destaque 24h: <strong>{topGainer.symbol} ({topGainer.change24h >= 0 ? `+${topGainer.change24h.toFixed(2)}%` : `${topGainer.change24h.toFixed(2)}%`})</strong></span>
             </div>
           )}
         </div>
@@ -736,7 +807,7 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
           <p className="text-xs font-bold">Nenhuma commodity encontrada para "{searchTerm}".</p>
           <button 
             onClick={() => { setSearchTerm(""); setSelectedCategory("Todas"); }}
-            className="mt-3 text-xs text-purple-600 font-bold hover:underline"
+            className="mt-3 text-xs text-purple-600 font-bold hover:underline cursor-pointer"
           >
             Limpar Filtros
           </button>
@@ -746,7 +817,6 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
           {filteredItems.map((item) => {
             const colors = coinColors[item.symbol] || { bg: "bg-purple-500/10", text: "text-purple-500", badge: "border-purple-500/30" };
             const isPositive = item.change24h >= 0;
-            const priceToDisplay = displayCurrency === "BRL" ? item.priceBrl : item.priceUsd;
             const dir = priceDirections[item.symbol];
 
             return (
@@ -804,7 +874,7 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
                 <div className="mt-2 mb-3">
                   <div className="flex items-center justify-between">
                     <span className={`text-[10px] uppercase font-extrabold tracking-wider ${darkMode ? "text-slate-500" : "text-slate-400"}`}>
-                      Cotação Atual ({displayCurrency})
+                      Cotação Atual ($ USD)
                     </span>
                     {dir && (
                       <span className={`text-[10px] font-mono font-extrabold px-1.5 py-0.2 rounded transition-all animate-bounce ${
@@ -821,13 +891,8 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
                         ? "text-rose-500 dark:text-rose-400" 
                         : "text-slate-900 dark:text-white"
                   }`}>
-                    {formatPrice(priceToDisplay, displayCurrency)}
+                    {formatPrice(item.priceUsd)}
                   </div>
-                  {displayCurrency === "BRL" && (
-                    <div className={`text-[10px] font-mono mt-0.5 ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
-                      ≈ ${formatPrice(item.priceUsd, "USD")}
-                    </div>
-                  )}
                 </div>
 
                 {/* Category & Action prompt footer */}
@@ -849,7 +914,15 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
 
       {/* Interactive Chart Modal */}
       {selectedCoin && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setSelectedCoin(null);
+              setCompareCoin(null);
+            }
+          }}
+        >
           <div className={`w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl border shadow-2xl transition-all ${
             darkMode 
               ? "bg-slate-900 border-slate-800 text-white" 
@@ -857,7 +930,7 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
           }`}>
             {/* Modal Header */}
             <div className={`p-5 border-b flex items-start justify-between gap-4 sticky top-0 z-10 ${
-              darkMode ? "bg-slate-900/95 border-slate-800" : "bg-white/95 border-slate-100"
+              darkMode ? "bg-slate-900/95 border-slate-800 backdrop-blur-md" : "bg-white/95 border-slate-100 backdrop-blur-md"
             }`}>
               <div className="flex items-center gap-3">
                 <div className={`w-11 h-11 rounded-2xl ${coinColors[selectedCoin.symbol]?.bg || "bg-purple-500/10"} border ${coinColors[selectedCoin.symbol]?.badge || "border-purple-500/30"} ${coinColors[selectedCoin.symbol]?.text || "text-purple-500"} flex items-center justify-center font-black font-mono text-sm shrink-0`}>
@@ -877,7 +950,7 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
                           ? "text-rose-500"
                           : darkMode ? "text-white" : "text-slate-900"
                     }`}>
-                      {formatPrice(displayCurrency === "BRL" ? selectedCoin.priceBrl : selectedCoin.priceUsd, displayCurrency)}
+                      {formatPrice(selectedCoin.priceUsd)}
                     </span>
                     <span className={`px-2 py-0.5 rounded text-[11px] font-bold font-mono ${
                       selectedCoin.change24h >= 0 
@@ -907,11 +980,11 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
                   }}
                   disabled={loading || loadingChart}
                   title="Atualizar dados e gráfico"
-                  className={`p-2 rounded-2xl border transition active:scale-95 flex items-center gap-1 text-xs font-bold ${
+                  className={`p-2 rounded-2xl border transition active:scale-95 flex items-center gap-1 text-xs font-bold cursor-pointer ${
                     loading || loadingChart ? "opacity-75 cursor-wait" : ""
                   } ${
                     darkMode 
-                      ? "bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-750" 
+                      ? "bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700" 
                       : "bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200"
                   }`}
                 >
@@ -927,7 +1000,7 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
                     setSelectedCoin(null);
                     setCompareCoin(null);
                   }}
-                  className={`p-2 rounded-2xl border transition ${
+                  className={`p-2 rounded-2xl border transition cursor-pointer ${
                     darkMode 
                       ? "bg-slate-800 border-slate-700 text-slate-400 hover:text-white" 
                       : "bg-slate-100 border-slate-200 text-slate-500 hover:text-slate-900"
@@ -954,7 +1027,7 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
                       <span>vs 🟠 {compareCoin.name} ({compareCoin.symbol})</span>
                       <button
                         onClick={() => setCompareCoin(null)}
-                        className="ml-1 text-slate-400 hover:text-rose-500 transition"
+                        className="ml-1 text-slate-400 hover:text-rose-500 transition cursor-pointer"
                         title="Remover comparação"
                       >
                         <X className="w-3.5 h-3.5" />
@@ -974,7 +1047,7 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
                       <option value="">+ Adicionar segunda moeda para sobreposição...</option>
                       {items.filter(i => i.symbol !== selectedCoin.symbol).map(item => (
                         <option key={item.symbol} value={item.symbol}>
-                          {item.name} ({item.symbol}) - {formatPrice(displayCurrency === "BRL" ? item.priceBrl : item.priceUsd, displayCurrency)}
+                          {item.name} ({item.symbol}) - {formatPrice(item.priceUsd)}
                         </option>
                       ))}
                     </select>
@@ -991,7 +1064,7 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
                     }`}>
                       <button
                         onClick={() => setComparisonMode("percentage")}
-                        className={`px-2.5 py-1 rounded-lg transition ${
+                        className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${
                           comparisonMode === "percentage" ? "bg-purple-600 text-white shadow-xs" : darkMode ? "text-slate-400" : "text-slate-600"
                         }`}
                         title="Comparação percentual normalizada indexada no início do período"
@@ -1000,19 +1073,19 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
                       </button>
                       <button
                         onClick={() => setComparisonMode("absolute")}
-                        className={`px-2.5 py-1 rounded-lg transition ${
+                        className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${
                           comparisonMode === "absolute" ? "bg-purple-600 text-white shadow-xs" : darkMode ? "text-slate-400" : "text-slate-600"
                         }`}
                         title="Valores monetários de mercado"
                       >
-                        Valores
+                        Valores ($)
                       </button>
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* Timeframe Selector & Currency Switcher */}
+              {/* Timeframe Selector */}
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className={`p-1 rounded-2xl border flex items-center gap-1 ${
                   darkMode ? "bg-slate-800/80 border-slate-700" : "bg-slate-100 border-slate-200"
@@ -1023,7 +1096,7 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
                       <button
                         key={p.id}
                         onClick={() => setSelectedPeriod(p.id)}
-                        className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition ${
+                        className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition cursor-pointer ${
                           isSelected 
                             ? "bg-purple-600 text-white shadow-xs" 
                             : darkMode ? "text-slate-400 hover:text-white" : "text-slate-600 hover:text-slate-900"
@@ -1036,25 +1109,11 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <div className={`p-1 rounded-xl border flex items-center gap-1 text-xs font-bold ${
-                    darkMode ? "bg-slate-800 border-slate-700" : "bg-slate-100 border-slate-200"
+                  <div className={`px-3 py-1.5 rounded-xl border flex items-center gap-1.5 text-xs font-bold font-mono ${
+                    darkMode ? "bg-slate-800 border-slate-700 text-emerald-400" : "bg-slate-100 border-slate-200 text-emerald-700"
                   }`}>
-                    <button
-                      onClick={() => setDisplayCurrency("BRL")}
-                      className={`px-2.5 py-1 rounded-lg transition ${
-                        displayCurrency === "BRL" ? "bg-purple-600 text-white" : darkMode ? "text-slate-400" : "text-slate-600"
-                      }`}
-                    >
-                      R$
-                    </button>
-                    <button
-                      onClick={() => setDisplayCurrency("USD")}
-                      className={`px-2.5 py-1 rounded-lg transition ${
-                        displayCurrency === "USD" ? "bg-purple-600 text-white" : darkMode ? "text-slate-400" : "text-slate-600"
-                      }`}
-                    >
-                      $
-                    </button>
+                    <DollarSign className="w-3.5 h-3.5" />
+                    <span>USD ($)</span>
                   </div>
                 </div>
               </div>
@@ -1069,7 +1128,7 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
                       Mínima no Período
                     </span>
                     <p className="text-sm font-black font-mono mt-0.5">
-                      {formatPrice(minChartVal, displayCurrency)}
+                      {formatPrice(minChartVal)}
                     </p>
                   </div>
                   <div>
@@ -1077,7 +1136,7 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
                       Máxima no Período
                     </span>
                     <p className="text-sm font-black font-mono mt-0.5">
-                      {formatPrice(maxChartVal, displayCurrency)}
+                      {formatPrice(maxChartVal)}
                     </p>
                   </div>
                   <div>
@@ -1183,7 +1242,8 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
                             stroke={darkMode ? "#94a3b8" : "#64748b"} 
                             fontSize={10} 
                             orientation="right"
-                            tickFormatter={(v) => formatPrice(v, displayCurrency)}
+                            width={75}
+                            tickFormatter={(v) => formatAxisPrice(v)}
                             tickLine={false}
                             axisLine={false}
                           />
@@ -1192,12 +1252,12 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
                               if (active && payload && payload.length) {
                                 const d = payload[0].payload;
                                 return (
-                                  <div className={`p-3 rounded-xl border shadow-xl text-xs font-mono ${
+                                   <div className={`p-3 rounded-xl border shadow-xl text-xs font-mono ${
                                     darkMode ? "bg-slate-900 border-slate-700 text-white" : "bg-white border-slate-200 text-slate-900"
                                   }`}>
                                     <p className="text-[10px] text-slate-400 mb-1">{d.timeLabel}</p>
                                     <p className="text-sm font-black text-purple-500">
-                                      {formatPrice(d.val1, displayCurrency)}
+                                      {formatPrice(d.val1)}
                                     </p>
                                     <p className={`text-[10px] mt-0.5 font-bold ${d.pct1 >= 0 ? "text-emerald-500" : "text-rose-500"}`}>
                                       {d.pct1 >= 0 ? `+${d.pct1.toFixed(2)}%` : `${d.pct1.toFixed(2)}%`} no período
@@ -1233,6 +1293,7 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
                               stroke={darkMode ? "#94a3b8" : "#64748b"} 
                               fontSize={10} 
                               orientation="right"
+                              width={60}
                               tickFormatter={(v) => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`}
                               tickLine={false}
                               axisLine={false}
@@ -1244,7 +1305,8 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
                                 stroke="#a855f7" 
                                 fontSize={10} 
                                 orientation="left"
-                                tickFormatter={(v) => formatPrice(v, displayCurrency)}
+                                width={75}
+                                tickFormatter={(v) => formatAxisPrice(v)}
                                 tickLine={false}
                                 axisLine={false}
                               />
@@ -1253,7 +1315,8 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
                                 stroke="#f59e0b" 
                                 fontSize={10} 
                                 orientation="right"
-                                tickFormatter={(v) => formatPrice(v, displayCurrency)}
+                                width={75}
+                                tickFormatter={(v) => formatAxisPrice(v)}
                                 tickLine={false}
                                 axisLine={false}
                               />
@@ -1276,7 +1339,7 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
                                         {selectedCoin.symbol}:
                                       </span>
                                       <div className="text-right">
-                                        <span className="font-bold">{formatPrice(d.val1, displayCurrency)}</span>
+                                        <span className="font-bold">{formatPrice(d.val1)}</span>
                                         <span className={`block text-[10px] font-bold ${d.pct1 >= 0 ? "text-emerald-500" : "text-rose-500"}`}>
                                           {d.pct1 >= 0 ? `+${d.pct1.toFixed(2)}%` : `${d.pct1.toFixed(2)}%`}
                                         </span>
@@ -1289,7 +1352,7 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
                                         {compareCoin.symbol}:
                                       </span>
                                       <div className="text-right">
-                                        <span className="font-bold">{formatPrice(d.val2, displayCurrency)}</span>
+                                        <span className="font-bold">{formatPrice(d.val2)}</span>
                                         <span className={`block text-[10px] font-bold ${d.pct2 >= 0 ? "text-emerald-500" : "text-rose-500"}`}>
                                           {d.pct2 >= 0 ? `+${d.pct2.toFixed(2)}%` : `${d.pct2.toFixed(2)}%`}
                                         </span>
@@ -1350,4 +1413,3 @@ export function DigitalCommodities({ darkMode }: DigitalCommoditiesProps) {
     </div>
   );
 }
-

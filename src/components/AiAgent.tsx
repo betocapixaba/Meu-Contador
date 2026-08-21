@@ -298,6 +298,13 @@ export default function AiAgent({ darkMode, onTransactionAdded, currency, transa
             setMessages(prev => [...prev, userMsg]);
           }
 
+          if (parsed && parsed.intent === "transaction" && parsed.type) {
+            const detectedAmount = parseFinancialAmount(parsed.transcript || parsed.description || "");
+            if (detectedAmount > 0 && (parsed.amount === undefined || parsed.amount <= 0 || parsed.amount !== detectedAmount)) {
+              parsed.amount = detectedAmount;
+            }
+          }
+
           const agentMsgId = "agt-" + Date.now();
           if (parsed.intent === "chat" || !parsed.type || parsed.amount === undefined) {
             const agentMsg: AgentMessage = {
@@ -430,6 +437,13 @@ export default function AiAgent({ darkMode, onTransactionAdded, currency, transa
       parsedResult = localFallbackParse(textToProcess);
     } finally {
       setLoading(false);
+    }
+
+    if (parsedResult && parsedResult.intent === "transaction" && parsedResult.type) {
+      const detectedAmount = parseFinancialAmount(textToProcess || parsedResult.transcript || parsedResult.description || "");
+      if (detectedAmount > 0 && (parsedResult.amount === undefined || parsedResult.amount <= 0 || parsedResult.amount !== detectedAmount)) {
+        parsedResult.amount = detectedAmount;
+      }
     }
 
     const agentMsgId = "agt-" + Date.now();

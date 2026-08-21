@@ -24,7 +24,7 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 // Initialize Auth
 export const auth = getAuth(app);
 
-// Initialize Firestore with Offline Persistence enabled (IndexedDB multi-tab cache)
+// Initialize Firestore with Offline Persistence enabled (IndexedDB multi-tab cache) and robust Long-Polling
 let firestoreDb;
 try {
   firestoreDb = initializeFirestore(
@@ -33,7 +33,7 @@ try {
       localCache: persistentLocalCache({
         tabManager: persistentMultipleTabManager(),
       }),
-      experimentalAutoDetectLongPolling: true,
+      experimentalForceLongPolling: true,
     }, 
     firebaseConfig.databaseId || "(default)"
   );

@@ -361,7 +361,7 @@ export default function Dashboard({
         </div>
 
         <div className="flex justify-between items-start mb-2 relative z-10">
-          <div>
+          <div className="w-full">
             <span className="text-xs opacity-80 mb-1 font-bold uppercase tracking-wider block">
               Saldo Líquido Disponível
             </span>
@@ -380,21 +380,76 @@ export default function Dashboard({
             
             {/* Explicit calculation formula display */}
             {!hideBalance && (
-              <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-purple-100/90 font-medium">
-                <span className="bg-emerald-400/20 px-1.5 py-0.5 rounded text-emerald-200 font-bold">
-                  +{formatCurrency(totalIncome, currency?.symbol)}
+              <div className="mt-2 flex items-center gap-1.5 text-[11px] text-purple-100/90 font-medium flex-wrap">
+                <span className="bg-emerald-400/25 px-2 py-0.5 rounded text-emerald-100 font-bold border border-emerald-300/30">
+                  Receitas: +{formatCurrency(totalIncome, currency?.symbol)}
                 </span>
                 <span>-</span>
-                <span className="bg-rose-500/20 px-1.5 py-0.5 rounded text-rose-200 font-bold">
-                  -{formatCurrency(totalExpense, currency?.symbol)}
+                <span className="bg-rose-500/25 px-2 py-0.5 rounded text-rose-100 font-bold border border-rose-300/30">
+                  Despesas: -{formatCurrency(totalExpense, currency?.symbol)}
                 </span>
                 <span>=</span>
-                <span className="font-bold underline text-white">
-                  {formatCurrency(currentBalance, currency?.symbol)}
+                <span className="font-bold underline text-white bg-white/10 px-2 py-0.5 rounded">
+                  Saldo: {formatCurrency(currentBalance, currency?.symbol)}
                 </span>
               </div>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* Income & Expense Breakdown Metric Cards */}
+      <div className="grid grid-cols-2 gap-3.5">
+        {/* Receitas Card */}
+        <div
+          id="dashboard-receitas-summary-card"
+          onClick={() => onSelectTab("Receitas")}
+          className={`p-4 rounded-2xl border transition-all cursor-pointer select-none active:scale-98 ${
+            darkMode
+              ? "bg-slate-900 border-slate-800 hover:border-emerald-500/40 hover:bg-slate-850 shadow-sm"
+              : "bg-white border-slate-100 hover:border-emerald-300 hover:bg-emerald-50/20 shadow-sm"
+          }`}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+              Receitas ({balanceScope === "month" ? "Mês" : "Geral"})
+            </span>
+            <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 flex items-center justify-center shrink-0">
+              <ArrowUpRight className="w-4 h-4" />
+            </div>
+          </div>
+          <p className="text-lg md:text-xl font-extrabold font-mono text-emerald-600 dark:text-emerald-400">
+            {hideBalance ? "••••••" : `+${formatCurrency(totalIncome, currency?.symbol)}`}
+          </p>
+          <p className="text-[10px] mt-1 text-slate-500 dark:text-slate-400 font-medium">
+            {balanceScope === "month" ? "Entradas do mês selecionado" : "Entradas totais acumuladas"}
+          </p>
+        </div>
+
+        {/* Despesas Card */}
+        <div
+          id="dashboard-despesas-summary-card"
+          onClick={() => onSelectTab("Despesas")}
+          className={`p-4 rounded-2xl border transition-all cursor-pointer select-none active:scale-98 ${
+            darkMode
+              ? "bg-slate-900 border-slate-800 hover:border-rose-500/40 hover:bg-slate-850 shadow-sm"
+              : "bg-white border-slate-100 hover:border-rose-300 hover:bg-rose-50/20 shadow-sm"
+          }`}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-rose-600 dark:text-rose-400">
+              Despesas ({balanceScope === "month" ? "Mês" : "Geral"})
+            </span>
+            <div className="w-7 h-7 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-500 flex items-center justify-center shrink-0">
+              <ArrowDownLeft className="w-4 h-4" />
+            </div>
+          </div>
+          <p className="text-lg md:text-xl font-extrabold font-mono text-rose-600 dark:text-rose-400">
+            {hideBalance ? "••••••" : `-${formatCurrency(totalExpense, currency?.symbol)}`}
+          </p>
+          <p className="text-[10px] mt-1 text-slate-500 dark:text-slate-400 font-medium">
+            {balanceScope === "month" ? "Saídas do mês selecionado" : "Saídas totais acumuladas"}
+          </p>
         </div>
       </div>
 
@@ -451,7 +506,7 @@ export default function Dashboard({
       <div className={`p-5 rounded-[2rem] border ${
         darkMode ? "bg-slate-900 border-slate-800" : "bg-white border-slate-100 shadow-sm"
       }`}>
-        <h4 className="font-bold text-sm tracking-tight mb-4">Gasto por Categoria</h4>
+        <h4 className={`font-bold text-sm tracking-tight mb-4 ${darkMode ? "text-white" : "text-slate-900"}`}>Gasto por Categoria</h4>
 
         {filteredTransactions.filter(t => t.type === "despesa").length === 0 ? (
           <div className="text-center py-6">
@@ -480,8 +535,8 @@ export default function Dashboard({
                   return (
                     <div key={category} className="space-y-1">
                       <div className="flex justify-between text-xs">
-                        <span className="font-semibold text-slate-700 dark:text-slate-300">{category}</span>
-                        <span className="font-mono font-bold text-slate-900 dark:text-white">{formatCurrency(amount, currency?.symbol)}</span>
+                        <span className={`font-semibold ${darkMode ? "text-slate-300" : "text-slate-700"}`}>{category}</span>
+                        <span className={`font-mono font-bold ${darkMode ? "text-white" : "text-slate-900"}`}>{formatCurrency(amount, currency?.symbol)}</span>
                       </div>
                       <div className={`w-full h-2 rounded-full overflow-hidden ${darkMode ? "bg-slate-800" : "bg-slate-100"}`}>
                         <div 
@@ -500,11 +555,11 @@ export default function Dashboard({
       {/* Recent Transactions List */}
       <div className="space-y-3">
         <div className="flex justify-between items-center">
-          <h4 className="font-bold text-sm tracking-tight text-slate-800 dark:text-slate-200">Atividades Recentes</h4>
+          <h4 className={`font-bold text-sm tracking-tight ${darkMode ? "text-white" : "text-slate-900"}`}>Atividades Recentes</h4>
           <button
             id="view-all-receitas-tab-btn"
             onClick={() => onSelectTab("Receitas")}
-            className="text-xs text-purple-600 dark:text-purple-400 font-bold hover:underline"
+            className={`text-xs font-bold hover:underline ${darkMode ? "text-purple-400" : "text-purple-600"}`}
           >
             Ver Tudo
           </button>
@@ -535,14 +590,14 @@ export default function Dashboard({
                     {t.type === "receita" ? <ArrowUpRight className="w-5 h-5" /> : <ArrowDownLeft className="w-5 h-5" />}
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-slate-900 dark:text-slate-100 line-clamp-1">{t.description}</p>
+                    <p className={`text-xs font-bold line-clamp-1 ${darkMode ? "text-white" : "text-slate-900"}`}>{t.description}</p>
                     <p className={`text-[9px] mt-0.5 flex items-center gap-1.5 ${
                       darkMode ? "text-slate-400" : "text-slate-500"
                     }`}>
                       <span>{t.category}</span>
                       {t.location && (
                         <>
-                          <span className="w-1 h-1 rounded-full bg-slate-400 dark:bg-slate-600"></span>
+                          <span className={`w-1 h-1 rounded-full ${darkMode ? "bg-slate-600" : "bg-slate-400"}`}></span>
                           <span className="line-clamp-1">{t.location}</span>
                         </>
                       )}

@@ -279,7 +279,7 @@ export default function TransactionsLists({
                 </div>
                 <div>
                   <div className="flex items-center gap-1.5">
-                    <p className="text-xs font-extrabold line-clamp-1">{t.description}</p>
+                    <p className={`text-xs font-extrabold line-clamp-1 ${darkMode ? "text-white" : "text-gray-900"}`}>{t.description}</p>
                     {t.receiptImage && (
                       <button
                         id={`view-receipt-btn-${t.id}`}

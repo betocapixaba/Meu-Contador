@@ -53,6 +53,11 @@ export default function App() {
   const [isFromCache, setIsFromCache] = useState(false);
 
   useEffect(() => {
+    document.documentElement.classList.toggle("dark", darkMode);
+    localStorage.setItem("contador_ia_dark", String(darkMode));
+  }, [darkMode]);
+
+  useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
 
@@ -677,27 +682,56 @@ export default function App() {
               <p className={`text-[8px] md:text-[9px] uppercase tracking-wider font-extrabold leading-none ${
                 darkMode ? "text-purple-400" : "text-purple-600"
               }`}>Ver Perfil ⚙️</p>
-              <h1 className="text-xs md:text-sm font-bold leading-tight mt-0.5 text-slate-900 dark:text-white truncate max-w-[120px] xs:max-w-[160px] md:max-w-[200px]" title={getUserDisplayName()}>
+              <h1 className={`text-xs md:text-sm font-bold leading-tight mt-0.5 truncate max-w-[120px] xs:max-w-[160px] md:max-w-[200px] ${
+                darkMode ? "text-white" : "text-black"
+              }`} title={getUserDisplayName()}>
                 {getUserDisplayName()}
               </h1>
             </div>
           </div>
 
           <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
-            {/* Dark / Light Mode Switch */}
-            <button
-              id="header-theme-toggle-btn"
-              onClick={toggleDarkMode}
-              title={darkMode ? "Mudar para Modo Claro" : "Mudar para Modo Escuro"}
-              className={`p-1.5 md:p-2 rounded-xl border transition-all duration-200 active:scale-90 shrink-0 flex items-center justify-center ${
-                darkMode 
-                  ? "bg-slate-800 border-slate-700 text-amber-400 hover:text-amber-300 hover:bg-slate-700" 
-                  : "bg-amber-50 border-amber-200 text-amber-600 hover:bg-amber-100 shadow-xs"
+            {/* Network & Firestore Real-Time Persistence Status Dot Indicator */}
+            <div
+              id="header-network-sync-indicator"
+              className={`flex items-center justify-center p-1.5 md:p-2 rounded-xl border transition-all duration-300 select-none shrink-0 ${
+                !isOnline
+                  ? darkMode
+                    ? "bg-rose-950/40 border-rose-800/60"
+                    : "bg-rose-50 border-rose-200 shadow-2xs"
+                  : hasPendingSync || dataLoading
+                    ? darkMode
+                      ? "bg-purple-950/40 border-purple-800/60"
+                      : "bg-purple-50 border-purple-200 shadow-2xs"
+                    : darkMode
+                      ? "bg-emerald-950/30 border-emerald-800/50"
+                      : "bg-emerald-50 border-emerald-200 shadow-2xs"
               }`}
+              title={
+                !isOnline
+                  ? "Offline: Sem conexão à internet. Alterações salvas localmente no cache."
+                  : hasPendingSync || dataLoading
+                    ? "Sincronizando: Gravando dados em tempo real..."
+                    : "Online: Conexão ativa em tempo real."
+              }
             >
-              {darkMode ? <Sun className="w-3.5 h-3.5 md:w-4 md:h-4" /> : <Moon className="w-3.5 h-3.5 md:w-4 md:h-4 text-indigo-700" />}
-            </button>
+              {!isOnline ? (
+                <span className="relative flex h-2.5 w-2.5 shrink-0" title="Offline">
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500 shadow-sm shadow-rose-500/50"></span>
+                </span>
+              ) : hasPendingSync || dataLoading ? (
+                <span className="relative flex h-2.5 w-2.5 shrink-0" title="Sincronizando">
+                  <span className="animate-spin relative inline-flex rounded-full h-2.5 w-2.5 border-2 border-purple-500 border-t-transparent"></span>
+                </span>
+              ) : (
+                <span className="relative flex h-2.5 w-2.5 shrink-0" title="Online">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500 shadow-sm shadow-emerald-500/50"></span>
+                </span>
+              )}
+            </div>
 
+            {/* Fullscreen Mode button */}
             <button
               id="header-fullscreen-btn"
               onClick={toggleFullScreen}
@@ -812,7 +846,7 @@ export default function App() {
         </div>
 
         {/* Main content body scrollable */}
-        <main className="flex-1 overflow-y-auto px-6 py-5 no-scrollbar pb-24 relative">
+        <main className="flex-1 overflow-y-auto px-4 py-4 md:px-6 md:py-5 no-scrollbar pb-6 relative">
           {activeTab === "Início" && (
             <Dashboard 
               darkMode={darkMode} 
@@ -885,76 +919,15 @@ export default function App() {
           )}
         </main>
 
-        {/* Big floating voice triggers in center of the layout / bottom center */}
-        <div className="absolute bottom-[84px] left-1/2 -translate-x-1/2 z-40 print:hidden flex flex-col items-center">
-          <button
-            id="global-floating-mic-btn"
-            onClick={() => setShowVoiceModal(true)}
-            className="w-15 h-15 bg-gradient-to-b from-purple-500 to-purple-700 text-white rounded-full flex items-center justify-center shadow-lg shadow-purple-600/35 hover:scale-105 active:scale-95 transition border-4 border-white dark:border-slate-900"
-          >
-            <Sparkles className="w-6 h-6 animate-pulse" />
-          </button>
-        </div>
-
-        {/* Fixed bottom navigation bar with icons optimized for single hand touch */}
-        <nav className={`border-t py-2 safe-bottom z-30 shrink-0 print:hidden ${
-          darkMode ? "bg-slate-950 border-slate-900 text-white" : "bg-white border-slate-100 shadow-xl text-slate-900"
-        }`}>
-          <div className="grid grid-cols-5 text-center items-center h-12">
-            <button
-              id="nav-inicio-btn"
-              onClick={() => setActiveTab("Início")}
-              className={`flex flex-col items-center gap-1 transition ${
-                activeTab === "Início" ? "text-purple-600 dark:text-purple-400 font-bold" : darkMode ? "text-slate-500 hover:text-white" : "text-slate-400 hover:text-slate-900"
-              }`}
-            >
-              <Home className="w-5 h-5 mt-1" />
-              <span className="text-[9px] font-bold uppercase tracking-wider">Início</span>
-            </button>
-
-            <button
-              id="nav-receitas-btn"
-              onClick={() => setActiveTab("Receitas")}
-              className={`flex flex-col items-center gap-1 transition ${
-                activeTab === "Receitas" ? "text-purple-600 dark:text-purple-400 font-bold" : darkMode ? "text-slate-500 hover:text-white" : "text-slate-400 hover:text-slate-900"
-              }`}
-            >
-              <ArrowUpRight className="w-5 h-5 mt-1" />
-              <span className="text-[9px] font-bold uppercase tracking-wider">Receitas</span>
-            </button>
-
-            {/* Spacer for voice mic trigger */}
-            <div className="w-full flex flex-col items-center justify-end pb-1 h-full">
-              <span className={`text-[8px] font-black uppercase tracking-widest ${
-                darkMode ? "text-purple-400" : "text-purple-600"
-              }`}>Kathleen</span>
-            </div>
-
-            <button
-              id="nav-despesas-btn"
-              onClick={() => setActiveTab("Despesas")}
-              className={`flex flex-col items-center gap-1 transition ${
-                activeTab === "Despesas" ? "text-purple-600 dark:text-purple-400 font-bold" : darkMode ? "text-slate-500 hover:text-white" : "text-slate-400 hover:text-slate-900"
-              }`}
-            >
-              <ArrowDownLeft className="w-5 h-5 mt-1" />
-              <span className="text-[9px] font-bold uppercase tracking-wider">Despesas</span>
-            </button>
-
-            <button
-              id="nav-relatorios-btn"
-              onClick={() => setActiveTab("Relatórios")}
-              className={`flex flex-col items-center gap-1 transition ${
-                activeTab === "Relatórios" ? "text-purple-600 dark:text-purple-400 font-bold" : darkMode ? "text-slate-500 hover:text-white" : "text-slate-400 hover:text-slate-900"
-              }`}
-            >
-              <FileText className="w-5 h-5 mt-1" />
-              <span className="text-[9px] font-bold uppercase tracking-wider">Relatórios</span>
-            </button>
-          </div>
-          {/* Home indicator bar mockup */}
-          <div className="hidden md:block w-32 h-1 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mt-1.5 opacity-50"></div>
-        </nav>
+        {/* Floating Quick Action Button for Voice Assistant */}
+        <button
+          id="global-floating-mic-btn"
+          onClick={() => setShowVoiceModal(true)}
+          title="Falar com Kathleen (Voz / IA)"
+          className="fixed bottom-5 right-5 z-40 print:hidden w-13 h-13 bg-gradient-to-tr from-purple-600 to-indigo-600 text-white rounded-full flex items-center justify-center shadow-xl shadow-purple-600/40 hover:scale-105 active:scale-95 transition-all border-2 border-white/20"
+        >
+          <Sparkles className="w-5 h-5 animate-pulse" />
+        </button>
 
         {/* GLOBAL VOICE MODAL SHEET */}
         {showVoiceModal && (

@@ -341,8 +341,8 @@ export default function VoiceAssistant({ darkMode, onTransactionAdded, onClose, 
       }
 
       let amountVal = Number(parsedData.amount) || 0;
-      const detectedAmount = parseFinancialAmount(originalInputText || transcript || parsedData.description || "");
-      if (detectedAmount > 0 && (amountVal <= 0 || (amountVal === 1 && (detectedAmount === 10 || detectedAmount === 100)))) {
+      const detectedAmount = parseFinancialAmount(originalInputText || transcript || manualInput || parsedData.description || "");
+      if (detectedAmount > 0 && (amountVal <= 0 || amountVal !== detectedAmount)) {
         amountVal = detectedAmount;
       }
 

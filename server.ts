@@ -33,6 +33,36 @@ function getAiClient(): GoogleGenAI {
   return aiClient;
 }
 
+// Multi-model Gemini fallback cascade to handle 429 Quota Exceeded, 503 Overload, or rate limits seamlessly
+const GEMINI_CASCADE_MODELS = [
+  "gemini-3.1-flash-lite",
+  "gemini-3.7-flash",
+  "gemini-flash-latest"
+];
+
+async function generateContentWithFallback(ai: GoogleGenAI, requestConfig: any, preferredModel = "gemini-3.1-flash-lite") {
+  const modelsToTry = [
+    preferredModel,
+    ...GEMINI_CASCADE_MODELS.filter(m => m !== preferredModel)
+  ];
+
+  let lastError: any = null;
+  for (const model of modelsToTry) {
+    try {
+      const response = await ai.models.generateContent({
+        ...requestConfig,
+        model
+      });
+      if (response && response.text) {
+        return response;
+      }
+    } catch (err: any) {
+      lastError = err;
+    }
+  }
+  throw lastError || new Error("All Gemini models exhausted");
+}
+
 // Helper: Convert clean number string handling both international and Brazilian punctuation
 function parseCleanNumberString(rawNum: string): number {
   if (!rawNum) return 0;
@@ -71,29 +101,61 @@ function parseCleanNumberString(rawNum: string): number {
 
 // Helper: Convert Portuguese words to number if spoken text used written numbers
 function parseSpokenPortugueseNumber(lowerText: string): number {
-  const spokenMap: [RegExp, number][] = [
-    [/\bdez\s+mil\b/i, 10000],
-    [/\bcinco\s+mil\b/i, 5000],
-    [/\bquatro\s+mil\b/i, 4000],
-    [/\btr[eê]s\s+mil\b/i, 3000],
-    [/\bdois\s+mil\b/i, 2000],
-    [/\bum\s+mil\b/i, 1000],
-    [/\bmil\b/i, 1000],
-    [/\bnovecentos\b/i, 900],
-    [/\boitocentos\b/i, 800],
-    [/\bsetecentos\b/i, 700],
-    [/\bseiscentos\b/i, 600],
-    [/\bquinhentos\b/i, 500],
-    [/\bquatrocentos\b/i, 400],
-    [/\btrezentos\b/i, 300],
-    [/\bduzentos\b/i, 200],
-    [/\bcem\b/i, 100],
+  if (!lowerText) return 0;
+
+  // Check for cents (centavos) pattern e.g. "cento e cinquenta reais e cinquenta centavos"
+  let cents = 0;
+  const centsMatch = lowerText.match(/(?:e|com)\s+(cinquenta|vinte|trinta|quarenta|sessenta|setenta|oitenta|noventa|[0-9]+)\s+centavos/i);
+  if (centsMatch && centsMatch[1]) {
+    const rawCents = centsMatch[1].toLowerCase();
+    if (rawCents === "cinquenta" || rawCents === "50") cents = 0.50;
+    else if (rawCents === "vinte" || rawCents === "20") cents = 0.20;
+    else if (rawCents === "trinta" || rawCents === "30") cents = 0.30;
+    else if (rawCents === "quarenta" || rawCents === "40") cents = 0.40;
+    else if (rawCents === "sessenta" || rawCents === "60") cents = 0.60;
+    else if (rawCents === "setenta" || rawCents === "70") cents = 0.70;
+    else if (rawCents === "oitenta" || rawCents === "80") cents = 0.80;
+    else if (rawCents === "noventa" || rawCents === "90") cents = 0.90;
+    else {
+      const num = parseInt(rawCents, 10);
+      if (!isNaN(num)) cents = num / 100;
+    }
+  }
+
+  // 1. Specific compound patterns (e.g. "cento e cinquenta", "cento e cinquenta e cinco", etc.)
+  if (/\bcento\s+e\s+cinquenta\b/i.test(lowerText)) {
+    let extra = 0;
+    if (/\bcento\s+e\s+cinquenta\s+e\s+nove\b/i.test(lowerText)) extra = 9;
+    else if (/\bcento\s+e\s+cinquenta\s+e\s+oito\b/i.test(lowerText)) extra = 8;
+    else if (/\bcento\s+e\s+cinquenta\s+e\s+sete\b/i.test(lowerText)) extra = 7;
+    else if (/\bcento\s+e\s+cinquenta\s+e\s+seis\b/i.test(lowerText)) extra = 6;
+    else if (/\bcento\s+e\s+cinquenta\s+e\s+cinco\b/i.test(lowerText)) extra = 5;
+    else if (/\bcento\s+e\s+cinquenta\s+e\s+quatro\b/i.test(lowerText)) extra = 4;
+    else if (/\bcento\s+e\s+cinquenta\s+e\s+tr[eê]s\b/i.test(lowerText)) extra = 3;
+    else if (/\bcento\s+e\s+cinquenta\s+e\s+dois\b|\bcento\s+e\s+cinquenta\s+e\s+duas\b/i.test(lowerText)) extra = 2;
+    else if (/\bcento\s+e\s+cinquenta\s+e\s+um\b|\bcento\s+e\s+cinquenta\s+e\s+uma\b/i.test(lowerText)) extra = 1;
+    return 150 + extra + cents;
+  }
+
+  const hundredsList: [RegExp, number][] = [
+    [/\bnovecentos\b|\bnovecentas\b/i, 900],
+    [/\boitocentos\b|\boitocentas\b/i, 800],
+    [/\bsetecentos\b|\bsetecentas\b/i, 700],
+    [/\bseiscentos\b|\bseiscentas\b/i, 600],
+    [/\bquinhentos\b|\bquinhentas\b/i, 500],
+    [/\bquatrocentos\b|\bquatrocentas\b/i, 400],
+    [/\btrezentos\b|\btrezentas\b/i, 300],
+    [/\bduzentos\b|\bduzentas\b/i, 200],
     [/\bcento\b/i, 100],
+    [/\bcem\b/i, 100]
+  ];
+
+  const tensList: [RegExp, number][] = [
     [/\bnoventa\b/i, 90],
     [/\boitenta\b/i, 80],
     [/\bsetenta\b/i, 70],
     [/\bsessenta\b/i, 60],
-    [/\bcinquenta\b/i, 50],
+    [/\bcinquenta\b|\bcincoenta\b/i, 50],
     [/\bquarenta\b/i, 40],
     [/\btrinta\b/i, 30],
     [/\bvinte\b/i, 20],
@@ -106,7 +168,10 @@ function parseSpokenPortugueseNumber(lowerText: string): number {
     [/\btreze\b/i, 13],
     [/\bdoze\b/i, 12],
     [/\bonze\b/i, 11],
-    [/\bdez\b/i, 10],
+    [/\bdez\b/i, 10]
+  ];
+
+  const unitsList: [RegExp, number][] = [
     [/\bnove\b/i, 9],
     [/\boito\b/i, 8],
     [/\bsete\b/i, 7],
@@ -115,14 +180,70 @@ function parseSpokenPortugueseNumber(lowerText: string): number {
     [/\bquatro\b/i, 4],
     [/\btr[eê]s\b/i, 3],
     [/\bdois\b|\bduas\b/i, 2],
-    [/\bum\s+(?:dólar|dolar|real|euro|peso|conto|mango|prata)\b/i, 1],
-    [/\buma\s+(?:libra|prata)\b/i, 1]
+    [/\bum\b|\buma\b|\bhum\b/i, 1]
   ];
 
-  for (const [regex, val] of spokenMap) {
-    if (regex.test(lowerText)) {
-      return val;
+  const thousandsList: [RegExp, number][] = [
+    [/\bdez\s+mil\b/i, 10000],
+    [/\bnove\s+mil\b/i, 9000],
+    [/\boito\s+mil\b/i, 8000],
+    [/\bsete\s+mil\b/i, 7000],
+    [/\bseis\s+mil\b/i, 6000],
+    [/\bcinco\s+mil\b/i, 5000],
+    [/\bquatro\s+mil\b/i, 4000],
+    [/\btr[eê]s\s+mil\b/i, 3000],
+    [/\bdois\s+mil\b|\bduas\s+mil\b/i, 2000],
+    [/\bum\s+mil\b|\bmil\b/i, 1000]
+  ];
+
+  let totalSpoken = 0;
+  let matchedSpoken = false;
+
+  for (const [thRegex, thVal] of thousandsList) {
+    if (thRegex.test(lowerText)) {
+      totalSpoken += thVal;
+      matchedSpoken = true;
+      break;
     }
+  }
+
+  for (const [hRegex, hVal] of hundredsList) {
+    if (hRegex.test(lowerText)) {
+      totalSpoken += hVal;
+      matchedSpoken = true;
+      break;
+    }
+  }
+
+  for (const [tRegex, tVal] of tensList) {
+    if (tRegex.test(lowerText)) {
+      totalSpoken += tVal;
+      matchedSpoken = true;
+      break;
+    }
+  }
+
+  if (totalSpoken === 0 || totalSpoken % 10 === 0) {
+    for (const [uRegex, uVal] of unitsList) {
+      if (totalSpoken > 0) {
+        const compUnitRegex = new RegExp(`(?:e\\s+|\\s+)${uRegex.source}`, "i");
+        if (compUnitRegex.test(lowerText)) {
+          totalSpoken += uVal;
+          break;
+        }
+      } else if (uRegex.test(lowerText)) {
+        const unitCurrency = new RegExp(`${uRegex.source}\\s+(?:reais|real|dólares|dolares|dólar|dolar|euros|euro|pesos|peso|bucks)`, "i");
+        if (unitCurrency.test(lowerText)) {
+          totalSpoken = uVal;
+          matchedSpoken = true;
+          break;
+        }
+      }
+    }
+  }
+
+  if (matchedSpoken && totalSpoken > 0) {
+    return totalSpoken + cents;
   }
 
   return 0;
@@ -134,7 +255,7 @@ function parseFinancialAmount(rawText: string): number {
   const text = rawText.trim();
   const lower = text.toLowerCase();
 
-  // 1. Explicit currency symbol + number: e.g. "$10.00", "$ 10.00", "R$ 10,00", "€ 50.00"
+  // 1. Explicit currency symbol + number: e.g. "$150.00", "$ 150.00", "$150", "R$ 150,00", "€ 50.00"
   const currencySymbolRegex = /(?:r\$\s*|\$\s*|€\s*|£\s*|¥\s*|chf\s*|a\$\s*|c\$\s*|zł\s*|kr\s*)([0-9]+(?:[.,][0-9]+)*)/i;
   const symbolMatch = text.match(currencySymbolRegex);
   if (symbolMatch && symbolMatch[1]) {
@@ -142,29 +263,33 @@ function parseFinancialAmount(rawText: string): number {
     if (val > 0) return val;
   }
 
-  // 2. Number + currency word: e.g. "10 dólares", "10 dolares", "10 reais", "10.00 dólares", "10,00 reais"
-  const currencyWordRegex = /\b([0-9]+(?:[.,][0-9]+)*)\s*(?:reais|real|dólares|dolares|dólar|dolar|euros|euro|libras|libra|pesos|peso|bucks|mangos|pratas|contos)\b/i;
+  // 2. Number + currency word: e.g. "150 dólares", "150 dolares", "150 reais", "150.00 dólares", "150,00 reais", "150 usd"
+  const currencyWordRegex = /\b([0-9]+(?:[.,][0-9]+)*)\s*(?:reais|real|dólares|dolares|dólar|dolar|euros|euro|libras|libra|pesos|peso|bucks|usd|brl|eur|mangos|pratas|contos)\b/i;
   const wordMatch = text.match(currencyWordRegex);
   if (wordMatch && wordMatch[1]) {
     const val = parseCleanNumberString(wordMatch[1]);
     if (val > 0) return val;
   }
 
-  // 3. Spoken Portuguese words
+  // 3. Spoken Portuguese words & compound phrases (e.g. "cento e cinquenta", "mil e quinhentos", "duzentos e cinquenta")
   const spokenWordAmount = parseSpokenPortugueseNumber(lower);
   if (spokenWordAmount > 0) {
     return spokenWordAmount;
   }
 
-  // 4. Any numeric digit sequences in the string
+  // 4. Any numeric digit sequences in the string: e.g. "150.00 de gasto", "gastei 150", "150 no almoço"
   const anyNumberMatches = text.match(/\b([0-9]+(?:[.,][0-9]+)*)\b/g);
   if (anyNumberMatches) {
     const currentYear = new Date().getFullYear();
-    for (const numStr of anyNumberMatches) {
-      const val = parseCleanNumberString(numStr);
-      if (val > 0 && val !== currentYear) {
-        return val;
-      }
+    const validMatches = anyNumberMatches.filter(n => {
+      const v = parseCleanNumberString(n);
+      return v > 0 && v !== currentYear;
+    });
+
+    if (validMatches.length > 0) {
+      return parseCleanNumberString(validMatches[0]);
+    } else if (anyNumberMatches.length > 0) {
+      return parseCleanNumberString(anyNumberMatches[0]);
     }
   }
 
@@ -707,7 +832,7 @@ Se 'type' for "despesa":
 1. Se for para REGISTRAR ou LANÇAR uma transação financeira:
    - intent: "transaction"
    - type: "receita" (ganhos, entradas, vendas, salários) OU "despesa" (gastos, contas, pagamentos, saídas)
-   - amount: número decimal positivo correspondente EXATAMENTE ao valor na moeda ${activeCurrency.symbol}. ATENÇÃO RIGOROSA: Extraia o valor numérico com exatidão sem dividir ou subtrair ordens de grandeza. Ex: '$10.00', '10.00', '$10', '10 dólares' ou 'dez dólares' DEVE RETORNAR amount: 10 (NUNCA 1.00 ou 1). R$ 1500 = 1500. $ 45.50 = 45.5.
+   - amount: número decimal positivo correspondente EXATAMENTE ao valor na moeda ${activeCurrency.symbol}. ATENÇÃO RIGOROSA: Extraia o valor numérico com exatidão sem dividir ou subtrair ordens de grandeza. Ex: '$150.00', '150.00', '$150', '150 dólares', '150 reais' ou 'cento e cinquenta' DEVE RETORNAR amount: 150 (NUNCA 15 ou 15.00). '$10.00', '10.00', '$10', '10 dólares' ou 'dez dólares' DEVE RETORNAR amount: 10 (NUNCA 1.00 ou 1). R$ 1500 = 1500. $ 45.50 = 45.5.
    - category: O NOME EXATO da categoria oficial de acordo com a lista acima (ex: "Alimentação", "Transporte", "Moradia", "Salário", "Serviços", "Lazer", "Saúde", "Compras", "Investimentos", "Vendas", "Outros")
    - location: estabelecimento/local (se mencionado, ex: "Dunkin", "Uber", "Posto Ipiranga", "Mercado Extra") ou null
    - client: nome do cliente ou pagador (se for receita, ex: "João", "Maria") ou null
@@ -715,7 +840,7 @@ Se 'type' for "despesa":
    - date: data no formato "YYYY-MM-DD" baseada na data de referência (${referenceDate})
    - isRecurrent: boolean (true se for mensalidade, assinatura, aluguel, recorrente)
    - confidence: número de 0 a 1 (ex: 0.95)
-   - reply: frase amigável confirmando o lançamento com a categoria e moeda "${activeCurrency.symbol}" (ex: "Entendi! Identifiquei uma SAÍDA (Despesa) de ${activeCurrency.symbol} 10,00 na categoria Alimentação.")
+   - reply: frase amigável confirmando o lançamento com a categoria e moeda "${activeCurrency.symbol}" (ex: "Entendi! Identifiquei uma SAÍDA (Despesa) de ${activeCurrency.symbol} 150,00 na categoria Alimentação.")
 
 2. Se for uma PERGUNTA, CONVERSA ou SAUDAÇÃO (ex: "Olá", "Quanto gastei este mês?", "Como economizar?"):
    - intent: "chat"
@@ -726,8 +851,7 @@ Contexto de referência:
 - Data de referência: ${referenceDate}
 - Resumo financeiro do usuário: ${JSON.stringify(transactionsSummary || {})}`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.7-flash",
+    const response = await generateContentWithFallback(ai, {
       contents: `Mensagem do usuário: "${text}"`,
       config: {
         systemInstruction: systemPrompt,
@@ -794,21 +918,21 @@ Contexto de referência:
     try {
       const parsedData = JSON.parse(cleanJson);
       if (parsedData.intent === "transaction" && parsedData.type) {
-        // Reconcile and guarantee exact amount matching
+        // Reconcile and guarantee exact amount matching with text and transcript
         const explicitAmount = parseFinancialAmount(text || parsedData.transcript || parsedData.description);
-        if (explicitAmount > 0 && (!parsedData.amount || parsedData.amount === 0 || (parsedData.amount === 1 && (explicitAmount === 10 || explicitAmount === 100)))) {
-          parsedData.amount = explicitAmount;
+        if (explicitAmount > 0) {
+          if (!parsedData.amount || parsedData.amount <= 0 || parsedData.amount !== explicitAmount) {
+            parsedData.amount = explicitAmount;
+          }
         }
         parsedData.category = normalizeServerTransactionCategory(parsedData.category, parsedData.type, text || parsedData.description);
       }
       res.json(parsedData);
     } catch (parseError) {
-      console.error("Failed to parse Gemini response as JSON, falling back locally:", responseText);
       const localResult = generateLocalFallbackCommandParse(text, referenceDate, transactionsSummary, activeCurrency);
       res.json(localResult);
     }
   } catch (error: any) {
-    console.warn("Parse command fallback activated: Gemini error/offline:", error);
     const localResult = generateLocalFallbackCommandParse(text, referenceDate, transactionsSummary, activeCurrency);
     res.json(localResult);
   }
@@ -856,7 +980,7 @@ Ouça o áudio gravado em português e faça o seguinte:
 1. Transcreva o que o usuário disse na chave "transcript".
 2. Analise se é um LANÇAMENTO DE TRANSAÇÃO (Receita ou Despesa) ou uma CONVERSA/PERGUNTA.
 3. Extraia o tipo ("receita" ou "despesa"), valor numérico (amount), categoria, descrição, local ou cliente.
-ATENÇÃO RIGOROSA NO VALOR (amount): O valor numérico deve ser exatamente o que o usuário falou. Ex: se disser '$10.00', '10.00', 'dez dólares' ou 'dez reais', o amount DEVE ser 10 (NUNCA 1). Se disser '100', o amount é 100.
+ATENÇÃO RIGOROSA NO VALOR (amount): O valor numérico deve ser exatamente o que o usuário falou. Ex: se disser '$150.00', '150.00', '150 dólares', '150 reais' ou 'cento e cinquenta', o amount DEVE ser 150 (NUNCA 15). Se disser '$10.00', '10.00', 'dez dólares' ou 'dez reais', o amount DEVE ser 10 (NUNCA 1). Se disser '100', o amount é 100. Se disser '500', o amount é 500. Se disser '1500', o amount é 1500.
 Data de referência atual: ${referenceDate}.
 
 Retorne APENAS o JSON no formato:
@@ -876,8 +1000,7 @@ Retorne APENAS o JSON no formato:
 }
 `;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.7-flash",
+    const response = await generateContentWithFallback(ai, {
       contents: [
         {
           inlineData: {
@@ -898,7 +1021,7 @@ Retorne APENAS o JSON no formato:
             intent: { type: Type.STRING, description: "Deve ser 'transaction' ou 'chat'." },
             reply: { type: Type.STRING, description: `Resposta amigável em português utilizando ${activeCurrency.symbol}.` },
             type: { type: Type.STRING, description: "Deve ser 'receita' ou 'despesa'." },
-            amount: { type: Type.NUMBER, description: `Valor exato da transação na moeda ${activeCurrency.symbol}. Ex: $10.00 ou 10 reais = 10.` },
+            amount: { type: Type.NUMBER, description: `Valor exato da transação na moeda ${activeCurrency.symbol}. Ex: $150.00 ou 150 reais = 150. $10.00 ou 10 reais = 10.` },
             category: { type: Type.STRING, description: "Categoria da transação." },
             location: { type: Type.STRING, description: "Local ou null." },
             client: { type: Type.STRING, description: "Cliente ou null." },
@@ -922,17 +1045,20 @@ Retorne APENAS o JSON no formato:
     if (parsedData.intent === "transaction" && parsedData.type) {
       // Reconcile and guarantee exact amount matching
       const explicitAmount = parseFinancialAmount(parsedData.transcript || parsedData.description);
-      if (explicitAmount > 0 && (!parsedData.amount || parsedData.amount === 0 || (parsedData.amount === 1 && (explicitAmount === 10 || explicitAmount === 100)))) {
-        parsedData.amount = explicitAmount;
+      if (explicitAmount > 0) {
+        if (!parsedData.amount || parsedData.amount <= 0 || parsedData.amount !== explicitAmount) {
+          parsedData.amount = explicitAmount;
+        }
       }
       parsedData.category = normalizeServerTransactionCategory(parsedData.category, parsedData.type, parsedData.transcript || parsedData.description);
     }
     res.json(parsedData);
   } catch (error: any) {
-    console.warn("Parse audio failed with Gemini, returning fallback:", error);
-    res.status(500).json({ 
-      error: "Não foi possível processar o áudio via Gemini.", 
-      details: error.message 
+    res.json({
+      transcript: "",
+      intent: "chat",
+      reply: "Não foi possível transcrever o áudio automaticamente. Você pode digitar ou tentar falar novamente.",
+      confidence: 0
     });
   }
 });
@@ -972,8 +1098,7 @@ Você deve retornar APENAS o objeto JSON abaixo, sem blocos de código markdown 
   "description": descrição sucinta da transação ou resumo dos principais itens comprados (ex: "Almoço de negócios", "Supermercado itens", "Café Dunkin")
 }`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.7-flash",
+    const response = await generateContentWithFallback(ai, {
       contents: [
         {
           text: receiptPrompt
@@ -1027,25 +1152,23 @@ Você deve retornar APENAS o objeto JSON abaixo, sem blocos de código markdown 
       parsedData.category = normalizeServerTransactionCategory(parsedData.category, "despesa", parsedData.description || parsedData.location);
       res.json(parsedData);
     } catch (parseError) {
-      console.warn("Failed to parse Gemini receipt response as JSON, using fallback:");
       const today = new Date().toISOString().split("T")[0];
       res.json({
         amount: 0,
         category: "Compras",
-        location: "Recibo (IA Offline)",
+        location: "Recibo",
         date: today,
-        description: "Recibo enviado. Digite o valor manualmente (IA Ocupada)."
+        description: "Recibo enviado. Digite o valor manualmente se necessário."
       });
     }
   } catch (error: any) {
-    console.warn("Scan receipt fallback activated: Gemini rate limited/offline.", error);
     const today = new Date().toISOString().split("T")[0];
     res.json({
       amount: 0,
       category: "Compras",
-      location: "Recibo (IA Offline)",
+      location: "Recibo",
       date: today,
-      description: "Recibo enviado. Digite o valor manualmente (IA Ocupada)."
+      description: "Recibo enviado. Digite o valor manualmente se necessário."
     });
   }
 });
@@ -1189,8 +1312,7 @@ Retorne APENAS um objeto JSON válido, sem markdown:
   "motivation": "frase curta e de impacto para motivar o usuário a economizar ou progredir"
 }`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.7-flash",
+    const response = await generateContentWithFallback(ai, {
       contents: [{ text: analysisPrompt }],
       config: {
         responseMimeType: "application/json",
@@ -1375,7 +1497,10 @@ app.get("/api/crypto-rates", async (req, res) => {
       const data = await binanceRes.json();
       if (Array.isArray(data) && data.length > 0) {
         const results = commoditiesList.map(item => {
-          const ticker = data.find((t: any) => t.symbol === item.pair);
+          const ticker = data.find((t: any) => 
+            (t.symbol === `${item.symbol}USDT` || t.symbol === `${item.symbol}USD`) && parseFloat(t.lastPrice) > 0
+          ) || data.find((t: any) => t.symbol === item.pair);
+
           const priceUsd = ticker ? parseFloat(ticker.lastPrice) : 0;
           const change24h = ticker ? parseFloat(ticker.priceChangePercent) : 0;
           const high24h = ticker ? parseFloat(ticker.highPrice) : 0;
@@ -1395,7 +1520,7 @@ app.get("/api/crypto-rates", async (req, res) => {
           };
         });
 
-        if (results.some(r => r.priceUsd > 0)) {
+        if (results.filter(r => r.priceUsd > 0).length >= 10) {
           return res.json({
             usdBrlRate,
             timestamp: timeFormatted,
@@ -1622,10 +1747,17 @@ app.get("/api/crypto-chart", async (req, res) => {
 
   // 1. Primary Chart Attempt: Binance.US Klines (High frequency, unblocked)
   try {
-    const binanceUrl = `https://api.binance.us/api/v3/klines?symbol=${pair}&interval=${interval}&limit=${limit}`;
-    const bRes = await fetch(binanceUrl, {
+    let binanceUrl = `https://api.binance.us/api/v3/klines?symbol=${pair}&interval=${interval}&limit=${limit}`;
+    let bRes = await fetch(binanceUrl, {
       headers: { "Cache-Control": "no-cache", "User-Agent": "Mozilla/5.0 FinancialDataHub/1.0" }
     });
+
+    if (!bRes.ok) {
+      binanceUrl = `https://api.binance.us/api/v3/klines?symbol=${symbol}USD&interval=${interval}&limit=${limit}`;
+      bRes = await fetch(binanceUrl, {
+        headers: { "Cache-Control": "no-cache", "User-Agent": "Mozilla/5.0 FinancialDataHub/1.0" }
+      });
+    }
 
     if (bRes.ok) {
       const klines = await bRes.json();

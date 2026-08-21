@@ -49,6 +49,7 @@ import { db, auth } from "../firebase";
 import { Goal, RecurrentExpense, Service, Client } from "../types";
 import { isDemoActive, localAddDoc, localUpdateDoc, localDeleteDoc } from "../utils/demoDb";
 import { Currency, WORLD_CURRENCIES, formatCurrency } from "../utils/currency";
+import { sendSmartNotification } from "../notifications";
 
 interface ProfileProps {
   darkMode: boolean;
@@ -131,7 +132,6 @@ export default function Profile({
     const permission = await Notification.requestPermission();
     setNotificationPermission(permission);
     if (permission === "granted") {
-      const { sendSmartNotification } = await import("../notifications");
       sendSmartNotification("Alertas Ativados! 🔔", {
         body: "Kathleen Contadora agora enviará alertas inteligentes sobre suas contas a pagar e metas de poupança atingidas.",
         tag: "notifications-welcome"
@@ -140,7 +140,6 @@ export default function Profile({
   };
 
   const handleSendTestNotification = async () => {
-    const { sendSmartNotification } = await import("../notifications");
     sendSmartNotification("Alerta de Teste Inteligente 💡", {
       body: "Este é um exemplo de notificação que a Kathleen Contadora enviará quando uma conta estiver para vencer ou meta for atingida!",
       tag: "test-alert",
@@ -640,7 +639,7 @@ export default function Profile({
                 {user?.displayName?.charAt(0).toUpperCase() || <User />}
               </div>
               <div>
-                <p className="text-sm font-extrabold">{user?.displayName || "Usuário"}</p>
+                <p className={`text-sm font-extrabold ${darkMode ? "text-white" : "text-black"}`}>{user?.displayName || "Usuário"}</p>
                 <p className={`text-[10px] ${darkMode ? "text-zinc-500" : "text-gray-400"}`}>{user?.email || "Convidado Demo"}</p>
               </div>
             </div>
